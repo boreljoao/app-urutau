@@ -8,12 +8,13 @@ import { Avatar, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
 import { empresas } from "@/db/schema";
 import { quando } from "@/lib/central";
-import { ETAPAS, NOME_ETAPA, NOME_INTERACAO, NOME_ORIGEM, NOME_SERVICO, NOME_STATUS_PROPOSTA, SERVICOS, linkWhatsapp } from "@/lib/comercial";
+import { ETAPAS, NOME_ETAPA, NOME_INTERACAO, NOME_ORIGEM, NOME_SERVICO, NOME_STATUS_PROPOSTA, SECOES_DO_SITE, SERVICOS, linkWhatsapp } from "@/lib/comercial";
 import { centavosParaInput, formatarReais } from "@/lib/dinheiro";
 import { formatarTelefone } from "@/lib/validacao";
 import { criarProposta, excluirLead, excluirProposta, ligarEmpresa, mudarEtapa, mudarStatusProposta, registrarInteracao, salvarLead } from "@/lib/servidor/acoes-comercial";
 import { listarEquipe } from "@/lib/servidor/central";
 import { obterLead } from "@/lib/servidor/comercial";
+import { caminhoDoLead } from "@/lib/servidor/visitantes";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,11 @@ export default async function Lead({ params }: { params: Promise<{ id: string }>
   const dados = /^[0-9a-f-]{36}$/i.test(id) ? await obterLead(db, id) : null;
   if (!dados) notFound();
   const { lead: l, historico, propostas } = dados;
-  const [equipe, listaEmpresas] = await Promise.all([listarEquipe(db), db.select({ id: empresas.id, nome: empresas.nome }).from(empresas).orderBy(asc(empresas.nome))]);
+  const [equipe, listaEmpresas, caminho] = await Promise.all([
+    listarEquipe(db),
+    db.select({ id: empresas.id, nome: empresas.nome }).from(empresas).orderBy(asc(empresas.nome)),
+    caminhoDoLead(db, id),
+  ]);
   const agora = new Date();
   const posicao = new Map(equipe.map((p, i) => [p.id, i]));
   const pessoas = equipe.map((p) => ({ id: p.id, nome: p.nome }));
@@ -142,6 +147,40 @@ export default async function Lead({ params }: { params: Promise<{ id: string }>
               </ol>
             )}
           </section>
+
+          {caminho.visitantes.length > 0 && (
+            <section className="cartao" aria-labelledby="t-caminho">
+              <TituloBloco acao={<Link href="/admin/comercial/site" className="text-[13px] text-suave hover:text-texto">Visitantes do site ›</Link>}>
+                <span id="t-caminho">Caminho no site</span>
+              </TituloBloco>
+              {caminho.visitantes.map((v) => (
+                <p key={v.id} className="mb-3 text-[13px] text-suave">
+                  Chegou por <span className="font-semibold text-texto">{v.origem ?? "Direto"}</span>
+                  {v.campanha ? ` (campanha ${v.campanha})` : ""} {quando(v.primeiraVisita, agora)}
+                  {v.cidade ? `, de ${v.cidade}${v.regiao ? `/${v.regiao}` : ""}` : ""}
+                  {v.aparelho ? `, no ${v.aparelho}` : ""} · {v.visitas} {v.visitas === 1 ? "visita" : "visitas"}
+                </p>
+              ))}
+              <ol className="space-y-1.5 text-[13px]">
+                {caminho.eventos.slice(0, 20).map((e) => (
+                  <li key={e.id} className="flex justify-between gap-3">
+                    <span>
+                      {e.tipo === "visita"
+                        ? "Abriu o site"
+                        : e.tipo === "secao"
+                          ? `Viu ${SECOES_DO_SITE[e.pagina ?? ""] ?? e.pagina}`
+                          : e.tipo === "whatsapp"
+                            ? "Clicou no WhatsApp"
+                            : e.tipo === "diagnostico"
+                              ? "Mandou o diagnóstico"
+                              : "Deixou contato"}
+                    </span>
+                    <span className="shrink-0 text-meta">{quando(e.criadoEm, agora)}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
 
           {mapsLink && l.latitude != null && (
             <section className="cartao" aria-labelledby="t-onde">

@@ -7,8 +7,9 @@ import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarConexao } from "@/db";
-import { interacoes, leads, propostas, usuarios } from "@/db/schema";
+import { eventosSite, interacoes, leads, propostas, usuarios, visitantes } from "@/db/schema";
 import { prospectosDoCsv } from "@/lib/comercial";
+import { caminhoDoLead, registrarVisitante, resumoDeVisitantes, visitantesRecentes } from "@/lib/servidor/visitantes";
 import { contagemPorEtapa, importarProspectos, leadDoSite, leadsNoMapa, listarLeads, lotesDeProspeccao, obterLead, proximosContatos, resumoComercial } from "@/lib/servidor/comercial";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -96,5 +97,47 @@ describe("funil e números", () => {
   it("filtro 'abertos' deixa de fora quem fechou ou perdeu", async () => {
     const nomes = (await listarLeads(db, { etapa: "abertos" })).map((l) => l.nome).sort();
     expect(nomes).toEqual(["Clínica A", "Clínica Mar"]);
+  });
+});
+
+describe("visitantes do site", () => {
+  const V = "aaaaaaaa-1111-4111-8111-000000000001";
+  const visita = (extra: Partial<Parameters<typeof registrarVisitante>[1]> = {}) => ({ id: V, cidade: "Niterói", regiao: "RJ", pais: "BR", aparelho: "celular", origem: "Instagram", meio: "social", campanha: "outubro", ...extra });
+
+  it("primeira origem fica; cidade e contagem de visitas acompanham", async () => {
+    await registrarVisitante(db, visita(), true);
+    await registrarVisitante(db, visita({ origem: "Google", campanha: "outra", cidade: "Maricá" }), true);
+    await registrarVisitante(db, visita({ cidade: null }), false);
+    const [v] = await db.select().from(visitantes).where(eq(visitantes.id, V));
+    expect(v).toMatchObject({ visitas: 2, origem: "Instagram", campanha: "outubro", cidade: "Maricá" });
+  });
+
+  it("quem chegou Direto e volta por um anúncio passa a ter a origem do anúncio", async () => {
+    const D = "bbbbbbbb-1111-4111-8111-000000000002";
+    await registrarVisitante(db, { ...visita(), id: D, origem: "Direto", meio: null, campanha: null }, true);
+    await registrarVisitante(db, { ...visita(), id: D, origem: "Google", campanha: "busca" }, true);
+    const [v] = await db.select().from(visitantes).where(eq(visitantes.id, D));
+    expect(v).toMatchObject({ origem: "Google", campanha: "busca" });
+  });
+
+  it("o diagnóstico liga o caminho do visitante ao lead", async () => {
+    await db.insert(eventosSite).values([
+      { tipo: "visita", visitanteId: V },
+      { tipo: "secao", pagina: "gestao", visitanteId: V },
+      { tipo: "whatsapp", visitanteId: V },
+    ]);
+    const r = await leadDoSite(db, { tipo: "diagnostico", nome: "Leo", negocio: "Loja Leo", telefone: "5521970000000", email: null, mensagem: null, dores: [], tamanho: null, pagina: "/", visitanteId: V });
+    const caminho = await caminhoDoLead(db, r!.id);
+    expect(caminho.visitantes.map((v) => v.id)).toEqual([V]);
+    expect(caminho.eventos.map((e) => e.tipo).sort()).toEqual(["secao", "visita", "whatsapp"]);
+  });
+
+  it("resumo e lista mostram quem agiu", async () => {
+    const r = await resumoDeVisitantes(db, 7);
+    expect(r).toMatchObject({ n: 2, voltaram: 2, viraramLead: 1, clicaramWhatsapp: 1 });
+    expect(r.porSecao).toEqual([{ nome: "gestao", n: 1 }]);
+    const agiram = await visitantesRecentes(db, { soQuemAgiu: true });
+    expect(agiram.map((v) => v.lead)).toEqual(["Loja Leo"]);
+    expect(agiram[0]).toMatchObject({ secoes: ["gestao"], cliquesWhatsapp: 1 });
   });
 });

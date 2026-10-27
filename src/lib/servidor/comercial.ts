@@ -5,6 +5,7 @@ import type { BancoDeDados } from "@/db";
 import { type EtapaLead, type OrigemLead, type StatusProposta, empresas, interacoes, leads, propostas, usuarios } from "@/db/schema";
 import { ETAPAS_ABERTAS, type Prospecto } from "@/lib/comercial";
 import { type Data, intervaloDoMes, type Mes } from "@/lib/datas";
+import { ligarVisitanteAoLead } from "./visitantes";
 
 /** Consultas do Comercial da Urutau. Quem chama já passou por exigirSuperadmin (ou é a rota do site). */
 
@@ -213,6 +214,8 @@ export interface DadosDoSite {
   dores: string[];
   tamanho: string | null;
   pagina: string | null;
+  /** Código anônimo do navegador: liga o caminho no site a este lead. */
+  visitanteId?: string | null;
 }
 
 /**
@@ -230,6 +233,7 @@ export async function leadDoSite(db: BancoDeDados, d: DadosDoSite) {
     .join("\n");
   if (existente) {
     await db.insert(interacoes).values({ leadId: existente.id, tipo: "nota", texto: `Voltou pelo site${d.pagina ? ` (${d.pagina})` : ""}.\n${resumo}`.trim() });
+    if (d.visitanteId) await ligarVisitanteAoLead(db, d.visitanteId, existente.id);
     return { id: existente.id, novo: false };
   }
   const [l] = await db
@@ -246,5 +250,6 @@ export async function leadDoSite(db: BancoDeDados, d: DadosDoSite) {
     })
     .returning({ id: leads.id });
   if (resumo) await db.insert(interacoes).values({ leadId: l.id, tipo: "nota", texto: resumo });
+  if (d.visitanteId) await ligarVisitanteAoLead(db, d.visitanteId, l.id);
   return { id: l.id, novo: true };
 }

@@ -227,3 +227,52 @@ export function linkWhatsapp(telefone: string | null, mensagem?: string): string
   if (digitos.length < 10) return null;
   return `https://wa.me/${digitos}${mensagem ? `?text=${encodeURIComponent(mensagem)}` : ""}`;
 }
+
+// ─── Visitantes do site ──────────────────────────────────────────────────────
+
+/** Seções do urutau.io (id da âncora → nome). */
+export const SECOES_DO_SITE: Record<string, string> = {
+  ecossistema: "Ecossistema",
+  gestao: "Gestão",
+  diagnostico: "Diagnóstico",
+  metodo: "Método",
+  cases: "Cases",
+  duvidas: "Dúvidas",
+};
+
+const ORIGENS_CONHECIDAS: [RegExp, string][] = [
+  [/(^|\.)instagram\.com$|^l\.instagram\.com$/, "Instagram"],
+  [/(^|\.)facebook\.com$|^fb\.me$|^m\.facebook\.com$/, "Facebook"],
+  [/(^|\.)google\.[a-z.]+$/, "Google"],
+  [/(^|\.)bing\.com$/, "Bing"],
+  [/(^|\.)linkedin\.com$|^lnkd\.in$/, "LinkedIn"],
+  [/(^|\.)whatsapp\.com$|^wa\.me$/, "WhatsApp"],
+  [/(^|\.)youtube\.com$|^youtu\.be$/, "YouTube"],
+  [/(^|\.)tiktok\.com$/, "TikTok"],
+  [/(^|\.)t\.co$|(^|\.)x\.com$|(^|\.)twitter\.com$/, "X"],
+];
+
+/**
+ * De onde o visitante veio: o utm_source quando o link tem etiqueta; senão, o site que mandou
+ * (referrer) com nome conhecido; sem nenhum dos dois, "Direto".
+ */
+export function origemDaVisita(utmSource: string | null | undefined, referrer: string | null | undefined, hostDoSite = "urutau.io"): string {
+  const utm = utmSource?.trim();
+  if (utm) {
+    const conhecido = ORIGENS_CONHECIDAS.find(([, nome]) => nome.toLowerCase() === utm.toLowerCase().replace(/^ig$/, "instagram").replace(/^fb$/, "facebook"));
+    return conhecido ? conhecido[1] : utm.slice(0, 60);
+  }
+  if (!referrer) return "Direto";
+  let host: string;
+  try {
+    host = new URL(referrer).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "Direto";
+  }
+  if (host === hostDoSite || host.endsWith(`.${hostDoSite}`)) return "Direto";
+  const conhecido = ORIGENS_CONHECIDAS.find(([re]) => re.test(host));
+  return conhecido ? conhecido[1] : host;
+}
+
+/** Código do visitante aceito: só letras minúsculas, números e hífen (o site gera um UUID). */
+export const codigoDeVisitanteValido = (c: unknown): c is string => typeof c === "string" && /^[a-z0-9-]{8,64}$/.test(c);

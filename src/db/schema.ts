@@ -92,7 +92,7 @@ export const origemClienteEnum = pgEnum("origem_cliente", ["manual", "whatsapp",
 export const atorEnum = pgEnum("ator", ["usuario", "admin", "agente", "sistema"]);
 export const statusTarefaEnum = pgEnum("status_tarefa", ["pendente", "executando", "concluida", "falhou"]);
 export const tipoMetaEnum = pgEnum("tipo_meta", ["valor", "quantidade"]);
-export const tipoEventoSiteEnum = pgEnum("tipo_evento_site", ["visita", "contato", "whatsapp", "diagnostico"]);
+export const tipoEventoSiteEnum = pgEnum("tipo_evento_site", ["visita", "contato", "whatsapp", "diagnostico", "secao"]);
 /** Por onde o lead chegou até a Urutau. */
 export const origemLeadEnum = pgEnum("origem_lead", ["site", "diagnostico", "whatsapp", "ligacao", "instagram", "indicacao", "prospeccao", "outro"]);
 /** Funil comercial da Urutau, na ordem. */
@@ -878,9 +878,36 @@ export const eventosSite = pgTable(
     nome: text("nome"),
     contato: text("contato"),
     mensagem: text("mensagem"),
+    /** Código anônimo do navegador (null se a pessoa recusou no aviso de privacidade). */
+    visitanteId: text("visitante_id").references(() => visitantes.id, { onDelete: "cascade" }),
     criadoEm: criadoEm(),
   },
-  (t) => [index("eventos_site_criado_idx").on(t.criadoEm)],
+  (t) => [index("eventos_site_criado_idx").on(t.criadoEm), index("eventos_site_visitante_idx").on(t.visitanteId, t.criadoEm)],
+);
+
+/**
+ * Um navegador que visitou o urutau.io, identificado só por um código aleatório guardado nele.
+ * A origem (de onde veio, campanha) é a da primeira visita; cidade e aparelho, os da última.
+ * Quando a pessoa manda o diagnóstico ou deixa contato, `leadId` liga o caminho ao lead.
+ */
+export const visitantes = pgTable(
+  "visitantes",
+  {
+    id: text("id").primaryKey(),
+    primeiraVisita: timestamp("primeira_visita", { withTimezone: true }).notNull().defaultNow(),
+    ultimaVisita: timestamp("ultima_visita", { withTimezone: true }).notNull().defaultNow(),
+    visitas: integer("visitas").notNull().default(0),
+    cidade: text("cidade"),
+    regiao: text("regiao"),
+    pais: text("pais"),
+    aparelho: text("aparelho"),
+    /** "instagram.com", "google", "direto"… ou o utm_source. */
+    origem: text("origem"),
+    meio: text("meio"),
+    campanha: text("campanha"),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+  },
+  (t) => [index("visitantes_ultima_idx").on(t.ultimaVisita), index("visitantes_lead_idx").on(t.leadId)],
 );
 
 export type TipoDivida =(typeof tipoDividaEnum.enumValues)[number];

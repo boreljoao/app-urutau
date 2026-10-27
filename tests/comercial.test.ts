@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cidadeDoEndereco, funil, lerCsv, linkWhatsapp, prospectosDoCsv } from "@/lib/comercial";
+import { cidadeDoEndereco, codigoDeVisitanteValido, funil, lerCsv, linkWhatsapp, origemDaVisita, prospectosDoCsv } from "@/lib/comercial";
 
 // Cabeçalho e linhas no formato do google-maps-scraper-kit com --full (colunas a mais são ignoradas).
 const CSV_DO_ROBO = [
@@ -66,5 +66,32 @@ describe("pequenas regras", () => {
     expect(linkWhatsapp("5521998765432", "Oi!")).toBe("https://wa.me/5521998765432?text=Oi!");
     expect(linkWhatsapp("123")).toBeNull();
     expect(linkWhatsapp(null)).toBeNull();
+  });
+});
+
+describe("origem da visita", () => {
+  it("etiqueta UTM ganha do referrer e vira nome conhecido", () => {
+    expect(origemDaVisita("instagram", "https://www.google.com/")).toBe("Instagram");
+    expect(origemDaVisita("ig", null)).toBe("Instagram");
+    expect(origemDaVisita("newsletter-outubro", null)).toBe("newsletter-outubro");
+  });
+
+  it("sem etiqueta, usa o site que mandou", () => {
+    expect(origemDaVisita(null, "https://l.instagram.com/?u=https%3A%2F%2Furutau.io")).toBe("Instagram");
+    expect(origemDaVisita(null, "https://www.google.com.br/")).toBe("Google");
+    expect(origemDaVisita(null, "https://blog.parceiro.com.br/post")).toBe("blog.parceiro.com.br");
+  });
+
+  it("sem nada, ou vindo do próprio site, é Direto", () => {
+    expect(origemDaVisita(null, null)).toBe("Direto");
+    expect(origemDaVisita(undefined, "https://urutau.io/#gestao")).toBe("Direto");
+    expect(origemDaVisita(undefined, "não é url")).toBe("Direto");
+  });
+
+  it("código do visitante: só o formato que o site gera", () => {
+    expect(codigoDeVisitanteValido("3f2a9c1e-8b7d-4e21-9a0b-1c2d3e4f5a6b")).toBe(true);
+    expect(codigoDeVisitanteValido("<script>")).toBe(false);
+    expect(codigoDeVisitanteValido("curto")).toBe(false);
+    expect(codigoDeVisitanteValido(42)).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ const ABAS = [
   { href: "/admin/comercial/leads", rotulo: "Leads" },
   { href: "/admin/comercial/propostas", rotulo: "Propostas" },
   { href: "/admin/comercial/prospeccao", rotulo: "Prospecção" },
+  { href: "/admin/comercial/site", rotulo: "Site" },
 ];
 
 export function AbasComercial() {
