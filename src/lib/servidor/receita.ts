@@ -16,7 +16,7 @@ import {
   regrasComissao,
   usuarios,
 } from "@/db/schema";
-import { type Data, type Mes, intervaloDoMes, mesDe, somarMeses } from "@/lib/datas";
+import { type Data, type Mes, hoje, intervaloDoMes, mesDe, somarMeses } from "@/lib/datas";
 import { type ContratoParaCalculo, type ItemParaCalculo, dividirEntreSocios, linhasDaCobranca, mensalidadeNoMes, mesesACobrar, repartirPagamento, ultimoMesDoContrato } from "@/lib/receita";
 
 /** Receita da Urutau no banco: cobranças, pagamentos, comissões, custos e os números do mês. */
@@ -74,10 +74,14 @@ export async function gerarCobrancas(db: BancoDeDados, ateMes: Mes, contratoId?:
       if (ja.has(`${c.id}|${competencia}`)) continue;
       const { linhas, total } = linhasDaCobranca(paraCalculo(c), meus, mes);
       if (!linhas.length) continue;
+      // No mês em que o contrato foi cadastrado, o vencimento não cai antes do cadastro.
+      const cadastro = hoje(c.criadoEm);
+      const dia = `${mes}-${String(c.diaVencimento).padStart(2, "0")}`;
+      const vencimento = mesDe(cadastro) === mes && dia < cadastro ? cadastro : dia;
       await db.transaction(async (tx) => {
         const [nova] = await tx
           .insert(cobrancas)
-          .values({ contratoId: c.id, competencia, vencimento: `${mes}-${String(c.diaVencimento).padStart(2, "0")}`, valorCentavos: total })
+          .values({ contratoId: c.id, competencia, vencimento, valorCentavos: total })
           .onConflictDoNothing()
           .returning({ id: cobrancas.id });
         if (!nova) return;
@@ -412,4 +416,17 @@ export async function comissoesAPagar(db: BancoDeDados) {
     .where(eq(ganhos.status, "a_pagar"))
     .groupBy(ganhos.usuarioId, usuarios.nome, usuarios.papelEquipe)
     .orderBy(desc(sql`sum(${ganhos.valorCentavos})`));
+}
+
+/** Quanto a pessoa ganhou em cada um dos meses (pelo mês em que o cliente pagou). */
+export async function serieDeGanhos(db: BancoDeDados, usuarioId: string, meses: Mes[]) {
+  const de = `${meses[0]}-01`;
+  const ate = intervaloDoMes(meses[meses.length - 1]).fim;
+  const linhas = await db
+    .select({ mes: sql<string>`to_char(${cobrancas.pagoEm}, 'YYYY-MM')`, v: sql<number>`sum(${ganhos.valorCentavos})::bigint`.mapWith(Number) })
+    .from(ganhos)
+    .innerJoin(cobrancas, eq(cobrancas.id, ganhos.cobrancaId))
+    .where(and(eq(ganhos.usuarioId, usuarioId), gte(cobrancas.pagoEm, de), lt(cobrancas.pagoEm, ate)))
+    .groupBy(sql`1`);
+  return meses.map((m) => ({ mes: m, valor: linhas.find((l) => l.mes === m)?.v ?? 0 }));
 }

@@ -48,7 +48,10 @@ beforeAll(async () => {
   wanderley = await pessoa("Wanderley");
   [loja] = await db.insert(clientesUrutau).values({ nome: "Clínica Mar", quemTrouxeId: wanderley.id }).returning({ id: clientesUrutau.id });
   // Agosto a janeiro, 20% de desconto nos 2 primeiros meses, vence dia 10.
-  [contrato] = await db.insert(contratos).values({ clienteId: loja.id, inicio: "2026-08-01", meses: 6, descontoPcm: 20_000, descontoMeses: 2 }).returning({ id: contratos.id });
+  [contrato] = await db
+    .insert(contratos)
+    .values({ clienteId: loja.id, inicio: "2026-08-01", meses: 6, descontoPcm: 20_000, descontoMeses: 2, criadoEm: new Date("2026-07-15T12:00:00-03:00") })
+    .returning({ id: contratos.id });
   [site] = await db
     .insert(contratoItens)
     .values({ contratoId: contrato.id, servico: "site", recorrencia: "unico", valorCentavos: 300_000, custoCentavos: 20_000, executorId: vinicius.id, executorPcm: 30_000, trouxePcm: 10_000 })
@@ -83,6 +86,19 @@ describe("cobranças", () => {
     ]);
     const linhas = await db.select().from(cobrancaItens).where(eq(cobrancaItens.cobrancaId, lista[0].id));
     expect(linhas.find((l) => l.itemId === site.id)).toMatchObject({ valorCentavos: 240_000, custoCentavos: 20_000 });
+  });
+
+  it("no mês do cadastro, o vencimento não cai antes do dia em que o contrato foi cadastrado", async () => {
+    const [outro] = await db.insert(clientesUrutau).values({ nome: "Cadastrado no dia 20" }).returning({ id: clientesUrutau.id });
+    const [k] = await db
+      .insert(contratos)
+      .values({ clienteId: outro.id, inicio: "2026-10-01", diaVencimento: 10, criadoEm: new Date("2026-10-20T15:00:00-03:00") })
+      .returning({ id: contratos.id });
+    await db.insert(contratoItens).values({ contratoId: k.id, servico: "post", recorrencia: "mensal", valorCentavos: 50_000 });
+    await gerarCobrancas(db, "2026-11", k.id);
+    const lista = await db.select().from(cobrancas).where(eq(cobrancas.contratoId, k.id)).orderBy(cobrancas.competencia);
+    expect(lista.map((c) => c.vencimento)).toEqual(["2026-10-20", "2026-11-10"]);
+    await db.delete(clientesUrutau).where(eq(clientesUrutau.id, outro.id));
   });
 
   it("atrasadas: as vencidas e não pagas", async () => {

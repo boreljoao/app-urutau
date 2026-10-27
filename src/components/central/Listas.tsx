@@ -17,16 +17,18 @@ function prazoEmTexto(prazo: string, hoje: string): { texto: string; atrasado: b
   return { texto: `até ${d}/${m}`, atrasado: false };
 }
 
-export function ListaAfazeres({ itens, hoje, posicao, vazio, mostrarDono = true }: { itens: Afazer[]; hoje: string; posicao: Map<string, number>; vazio: string; mostrarDono?: boolean }) {
+/** `eu`: a equipe só conclui e exclui as próprias tarefas; os sócios, todas. */
+export function ListaAfazeres({ itens, hoje, posicao, vazio, eu, mostrarDono = true }: { itens: Afazer[]; hoje: string; posicao: Map<string, number>; vazio: string; eu: { id: string; socio: boolean }; mostrarDono?: boolean }) {
   if (itens.length === 0) return <Vazio>{vazio}</Vazio>;
   return (
     <ul className="divide-y divide-superficie-2">
       {itens.map((a) => {
         const p = a.prazo ? prazoEmTexto(a.prazo, hoje) : null;
         const feito = !!a.feitoEm;
+        const meu = eu.socio || a.responsavelId === eu.id;
         return (
           <li key={a.id} className="group flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
-            <CaixaFeito acao={concluirAfazer.bind(null, a.id)} feito={feito} titulo={a.titulo} />
+            <CaixaFeito acao={concluirAfazer.bind(null, a.id)} feito={feito} titulo={a.titulo} desabilitado={!meu} />
             <div className="min-w-0 flex-1">
               <p className={`text-[13px] leading-5 ${feito ? "text-meta line-through" : ""}`}>{a.titulo}</p>
               <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-meta">
@@ -34,9 +36,11 @@ export function ListaAfazeres({ itens, hoje, posicao, vazio, mostrarDono = true 
                 {a.empresa && a.empresaId && (
                   <Link href={`/admin/empresas/${a.empresaId}`} className="hover:text-texto">{a.empresa}</Link>
                 )}
-                <span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
-                  <BotaoLinha acao={excluirAfazer.bind(null, a.id)} rotulo="Excluir" confirmar={`Excluir a tarefa "${a.titulo}"?`} />
-                </span>
+                {meu && (
+                  <span className="opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                    <BotaoLinha acao={excluirAfazer.bind(null, a.id)} rotulo="Excluir" confirmar={`Excluir a tarefa "${a.titulo}"?`} />
+                  </span>
+                )}
               </p>
             </div>
             {mostrarDono &&

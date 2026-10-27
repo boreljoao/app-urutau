@@ -20,6 +20,7 @@ export async function listarEquipe(db: BancoDeDados) {
       vistoEm: usuarios.vistoEm,
       ondeEsta: usuarios.ondeEsta,
       senhaProvisoria: usuarios.senhaProvisoria,
+      papel: usuarios.papelEquipe,
     })
     .from(usuarios)
     .where(eq(usuarios.superadmin, true))

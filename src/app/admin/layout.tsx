@@ -23,7 +23,7 @@ export default async function LayoutCentral({ children }: { children: React.Reac
               urutau <span className="text-suave">central</span>
             </span>
           </Link>
-          <Navegacao />
+          <Navegacao socio={eu.socio} />
           <div className="ml-auto flex items-center gap-3">
             <Link href="/admin/conta" className="flex items-center gap-2 text-sm text-suave hover:text-texto">
               <span className="hidden sm:inline">{eu.nome.split(" ")[0]}</span>

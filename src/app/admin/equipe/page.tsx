@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { BotaoRedefinirSenha } from "@/components/Admin";
-import { FormPessoaEquipe } from "@/components/central/Formularios";
+import { FormPessoaEquipe, SeletorPapel } from "@/components/central/Formularios";
 import { Avatar, Ponto, TituloBloco } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
 import { presenca } from "@/lib/central";
 import { exigirSuperadmin } from "@/lib/servidor/acesso";
-import { adicionarPessoaEquipe, redefinirSenhaEquipe } from "@/lib/servidor/acoes-central";
+import { adicionarPessoaEquipe, definirPapelEquipe, redefinirSenhaEquipe } from "@/lib/servidor/acoes-central";
 import { listarEquipe } from "@/lib/servidor/central";
 
 export const metadata = { title: "Equipe" };
@@ -34,12 +34,18 @@ export default async function Equipe() {
                   <Ponto estado={st.estado} /> {st.texto}
                 </span>
                 {p.senhaProvisoria && <span className="rounded-full bg-aviso-fundo px-2 py-0.5 text-[12px]">senha provisória</span>}
-                {p.id !== eu.id && <BotaoRedefinirSenha acao={redefinirSenhaEquipe.bind(null, p.id)} nome={p.nome} />}
+                {eu.socio && p.id !== eu.id ? (
+                  <SeletorPapel key={p.papel} acao={definirPapelEquipe.bind(null, p.id)} atual={p.papel} nome={p.nome} />
+                ) : (
+                  <span className="text-[12px] text-meta">{p.papel === "socio" ? "sócio" : "equipe"}</span>
+                )}
+                {p.id !== eu.id && eu.socio && <BotaoRedefinirSenha acao={redefinirSenhaEquipe.bind(null, p.id)} nome={p.nome} />}
               </li>
             );
           })}
         </ul>
       </section>
+      {eu.socio && (
       <section className="cartao h-fit bg-superficie" aria-labelledby="t-nova">
         <TituloBloco>
           <span id="t-nova">Pôr alguém na equipe</span>
@@ -49,6 +55,7 @@ export default async function Equipe() {
         </p>
         <FormPessoaEquipe acao={adicionarPessoaEquipe} />
       </section>
+      )}
     </div>
   );
 }

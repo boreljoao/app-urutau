@@ -7,6 +7,7 @@ import { Linhas } from "@/components/central/Linhas";
 import { ListaMetas } from "@/components/central/ListaMetas";
 import { Avatar, Ponto, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
+import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { PERFIS } from "@/lib/perfis";
 import { fracaoDoMes, presenca, primeiroNome, quando, ritmo, rotuloDaTela } from "@/lib/central";
 import { hoje, mesAtual, nomeDoMes } from "@/lib/datas";
@@ -24,6 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function AreaDaPessoa({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const eu = await exigirSuperadmin();
   const db = obterDb();
   const agora = new Date();
   const mes = mesAtual(agora);
@@ -131,9 +133,11 @@ export default async function AreaDaPessoa({ params }: { params: Promise<{ id: s
           <TituloBloco>
             <span id="t-tarefas">Tarefas de {nome}</span>
           </TituloBloco>
-          <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={todasEmpresas.map((e) => ({ id: e.id, nome: e.nome }))} responsavelId={id} />
+          {(eu.socio || eu.id === id) && (
+            <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={todasEmpresas.map((e) => ({ id: e.id, nome: e.nome }))} responsavelId={id} />
+          )}
           <div className="mt-4">
-            <ListaAfazeres itens={tarefas} hoje={hojeData} posicao={new Map(equipe.map((x, j) => [x.id, j]))} vazio={`${nome} está sem tarefas abertas.`} mostrarDono={false} />
+            <ListaAfazeres itens={tarefas} hoje={hojeData} posicao={new Map(equipe.map((x, j) => [x.id, j]))} vazio={`${nome} está sem tarefas abertas.`} eu={eu} mostrarDono={false} />
           </div>
         </section>
         <section className="cartao" aria-labelledby="t-notas">

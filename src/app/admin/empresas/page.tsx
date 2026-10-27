@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AbasClientes } from "@/components/central/AbasClientes";
 import { FormResponsavel } from "@/components/central/Formularios";
 import { Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
@@ -22,9 +23,10 @@ export default async function Clientes() {
   const semDono = empresas.filter((e) => !e.responsavelId).length;
   return (
     <div className="space-y-5">
+      <AbasClientes />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-titulo text-2xl font-bold tracking-tight">Clientes da Urutau</h1>
+          <h1 className="font-titulo text-2xl font-bold tracking-tight">Empresas no sistema</h1>
           <p className="mt-1 text-[15px] text-suave">
             {empresas.length} {empresas.length === 1 ? "empresa" : "empresas"} no app
             {semDono ? ` · ${semDono} sem responsável na equipe` : " · todas com responsável"}

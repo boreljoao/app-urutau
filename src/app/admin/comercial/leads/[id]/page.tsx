@@ -6,6 +6,7 @@ import { BotaoLinha, Gaveta } from "@/components/central/Formularios";
 import { MapaLeads } from "@/components/central/MapaLeads";
 import { Avatar, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
+import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { empresas } from "@/db/schema";
 import { quando } from "@/lib/central";
 import { ETAPAS, NOME_ETAPA, NOME_INTERACAO, NOME_ORIGEM, NOME_SERVICO, NOME_STATUS_PROPOSTA, SECOES_DO_SITE, SERVICOS, linkWhatsapp } from "@/lib/comercial";
@@ -30,6 +31,7 @@ export default async function Lead({ params }: { params: Promise<{ id: string }>
   const dados = /^[0-9a-f-]{36}$/i.test(id) ? await obterLead(db, id) : null;
   if (!dados) notFound();
   const { lead: l, historico, propostas } = dados;
+  const { socio } = await exigirSuperadmin();
   const [equipe, listaEmpresas, caminho] = await Promise.all([
     listarEquipe(db),
     db.select({ id: empresas.id, nome: empresas.nome }).from(empresas).orderBy(asc(empresas.nome)),
@@ -284,6 +286,16 @@ export default async function Lead({ params }: { params: Promise<{ id: string }>
               </ul>
             )}
           </section>
+
+          {socio && (
+            <section className="cartao" aria-labelledby="t-virou">
+              <TituloBloco>
+                <span id="t-virou">Fechou?</span>
+              </TituloBloco>
+              <p className="mb-3 text-[13px] text-suave">Cadastre o contrato e os serviços: o lead vai para Fechou e as cobranças e comissões passam a ser contadas.</p>
+              <Link href={`/admin/clientes/novo?lead=${l.id}`} className="btn-central">Virar cliente da Urutau</Link>
+            </section>
+          )}
 
           <section className="cartao" aria-labelledby="t-cliente">
             <TituloBloco>

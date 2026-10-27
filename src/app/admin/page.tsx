@@ -8,6 +8,7 @@ import { ListaAfazeres, ListaAtencao } from "@/components/central/Listas";
 import { ListaMetas } from "@/components/central/ListaMetas";
 import { Avatar, Ponto, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
+import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { fracaoDoMes, montarAtencao, presenca, primeiroNome, quando, ritmo, rotuloDaTela, variacao } from "@/lib/central";
 import { hoje, mesAtual, nomeDoMes, somarDias, somarMeses } from "@/lib/datas";
 import { formatarReais } from "@/lib/dinheiro";
@@ -33,6 +34,7 @@ export const dynamic = "force-dynamic";
 const SEMANA_MS = 7 * 86_400_000;
 
 export default async function VisaoGeral() {
+  const eu = await exigirSuperadmin();
   const db = obterDb();
   const agora = new Date();
   const hojeData = hoje(agora);
@@ -96,7 +98,7 @@ export default async function VisaoGeral() {
         </div>
         <div className="flex gap-2">
           <Gaveta rotulo="Nova tarefa" titulo="Nova tarefa">
-            <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={opcoesEmpresas} />
+            <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={opcoesEmpresas} responsavelId={eu.socio ? undefined : eu.id} />
           </Gaveta>
           <Gaveta rotulo="Nova meta" titulo="Nova meta do mês" principal>
             <FormMeta acao={criarMeta} equipe={pessoas} />
@@ -195,9 +197,9 @@ export default async function VisaoGeral() {
           <TituloBloco acao={<span className="text-[13px] text-meta">{feitas7} feitas em 7 dias</span>}>
             <span id="t-afazeres">Tarefas da equipe</span>
           </TituloBloco>
-          <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={opcoesEmpresas} />
+          <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={opcoesEmpresas} responsavelId={eu.socio ? undefined : eu.id} />
           <div className="mt-4">
-            <ListaAfazeres itens={abertas.slice(0, 10)} hoje={hojeData} posicao={posicao} vazio="Nenhuma tarefa aberta." />
+            <ListaAfazeres itens={abertas.slice(0, 10)} hoje={hojeData} posicao={posicao} vazio="Nenhuma tarefa aberta." eu={eu} />
             {abertas.length > 10 && <p className="mt-2 text-[12px] text-meta">e mais {abertas.length - 10} na área de cada pessoa</p>}
           </div>
         </section>

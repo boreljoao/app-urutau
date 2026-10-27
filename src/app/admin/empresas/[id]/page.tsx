@@ -8,6 +8,7 @@ import { ListaAfazeres } from "@/components/central/Listas";
 import { Ponto, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { GraficoMeses } from "@/components/GraficoMeses";
 import { obterDb } from "@/db";
+import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { presenca, primeiroNome, quando, rotuloDaTela } from "@/lib/central";
 import { formatarData, hoje, mesAtual, nomeDoMes } from "@/lib/datas";
 import { formatarPcm, formatarReais } from "@/lib/dinheiro";
@@ -26,6 +27,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ClienteNaCentral({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const eu = await exigirSuperadmin();
   const db = obterDb();
   const dados = /^[0-9a-f-]{36}$/i.test(id) ? await obterEmpresaAdmin(db, id) : null;
   if (!dados) notFound();
@@ -207,9 +209,9 @@ export default async function ClienteNaCentral({ params }: { params: Promise<{ i
             <TituloBloco>
               <span id="t-tarefas">Tarefas deste cliente</span>
             </TituloBloco>
-            <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={[]} empresaId={empresa.id} />
+            <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={[]} empresaId={empresa.id} responsavelId={eu.socio ? undefined : eu.id} />
             <div className="mt-4">
-              <ListaAfazeres itens={tarefas} hoje={hojeData} posicao={posicao} vazio="Nenhuma tarefa aberta para este cliente." />
+              <ListaAfazeres itens={tarefas} hoje={hojeData} posicao={posicao} vazio="Nenhuma tarefa aberta para este cliente." eu={eu} />
             </div>
           </section>
 

@@ -253,3 +253,24 @@ export function FormSenha({ acao }: { acao: Acao }) {
     </form>
   );
 }
+
+/** Sócio ou equipe, trocado direto na lista (só os sócios veem este seletor). */
+export function SeletorPapel({ acao, atual, nome }: { acao: (fd: FormData) => Promise<void>; atual: "socio" | "equipe"; nome: string }) {
+  const [pendente, iniciar] = useTransition();
+  return (
+    <select
+      aria-label={`Papel de ${nome}`}
+      defaultValue={atual}
+      disabled={pendente}
+      onChange={(ev) => {
+        const fd = new FormData();
+        fd.set("papel", ev.target.value);
+        iniciar(() => acao(fd));
+      }}
+      className="campo !min-h-8 !w-auto !py-1 text-[13px]"
+    >
+      <option value="socio">Sócio</option>
+      <option value="equipe">Equipe</option>
+    </select>
+  );
+}

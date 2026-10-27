@@ -8,19 +8,20 @@ type Acao = (e: EstadoForm, fd: FormData) => Promise<EstadoForm>;
 type Opcao = { id: string; nome: string };
 
 /** Caixinha de concluir: marca na hora e o servidor confirma em seguida. */
-export function CaixaFeito({ acao, feito, titulo }: { acao: (feito: boolean) => Promise<void>; feito: boolean; titulo: string }) {
+export function CaixaFeito({ acao, feito, titulo, desabilitado = false }: { acao: (feito: boolean) => Promise<void>; feito: boolean; titulo: string; desabilitado?: boolean }) {
   const [pendente, iniciar] = useTransition();
   return (
     <input
       type="checkbox"
       defaultChecked={feito}
-      disabled={pendente}
+      disabled={pendente || desabilitado}
+      title={desabilitado ? "Só quem é dono da tarefa (ou um sócio) pode marcar" : undefined}
       aria-label={feito ? `Reabrir: ${titulo}` : `Concluir: ${titulo}`}
       onChange={(e) => {
         const marcado = e.target.checked;
         iniciar(() => acao(marcado));
       }}
-      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--destaque)]"
+      className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--destaque)] disabled:cursor-not-allowed disabled:opacity-40"
     />
   );
 }

@@ -9,7 +9,7 @@ import { intervaloDoMes, mesAtual } from "@/lib/datas";
 import { lerReais } from "@/lib/dinheiro";
 import type { EstadoForm } from "@/lib/estado-form";
 import { errosPorCampo, formParaObjeto } from "@/lib/validacao";
-import { exigirSuperadmin } from "./acesso";
+import { exigirSocio, exigirSuperadmin } from "./acesso";
 import { registrarAuditoria } from "./auditoria";
 import { gerarSenhaProvisoria, hashSenha } from "./auth";
 
@@ -132,7 +132,7 @@ const esquemaPessoaEquipe = z.object({
  * conta existente só ganha o acesso de equipe.
  */
 export async function adicionarPessoaEquipe(_: EstadoForm, fd: FormData): Promise<EstadoForm> {
-  const admin = await exigirSuperadmin();
+  const admin = await exigirSocio();
   const valores = formParaObjeto(fd);
   const r = esquemaPessoaEquipe.safeParse(valores);
   if (!r.success) return { erros: errosPorCampo(r.error), valores };
@@ -162,7 +162,7 @@ export async function adicionarPessoaEquipe(_: EstadoForm, fd: FormData): Promis
 
 /** Senha nova para alguém da equipe; derruba as sessões abertas dessa pessoa. */
 export async function redefinirSenhaEquipe(usuarioId: string): Promise<{ erro?: string; senha?: string }> {
-  const admin = await exigirSuperadmin();
+  const admin = await exigirSocio();
   if (usuarioId === admin.id) return { erro: "Para a sua própria senha, use Minha conta." };
   const db = obterDb();
   const [p] = await db.select({ nome: usuarios.nome }).from(usuarios).where(and(eq(usuarios.id, usuarioId), eq(usuarios.superadmin, true))).limit(1);
@@ -193,14 +193,19 @@ export async function criarAfazer(_: EstadoForm, fd: FormData): Promise<EstadoFo
   const r = esquemaAfazer.safeParse(valores);
   if (!r.success) return { erros: errosPorCampo(r.error), valores };
   const db = obterDb();
+  // A equipe só cria tarefa para si mesma; os sócios criam para qualquer um.
+  const responsavelId = admin.socio ? (r.data.responsavelId ?? null) : admin.id;
   const [a] = await db
     .insert(afazeres)
-    .values({ titulo: r.data.titulo, responsavelId: r.data.responsavelId ?? null, empresaId: r.data.empresaId ?? null, prazo: r.data.prazo ?? null, criadoPor: admin.id })
+    .values({ titulo: r.data.titulo, responsavelId, empresaId: r.data.empresaId ?? null, prazo: r.data.prazo ?? null, criadoPor: admin.id })
     .returning({ id: afazeres.id });
   await registrarAuditoria(db, { empresaId: r.data.empresaId ?? null, usuarioId: admin.id, ator: "usuario", acao: "afazer.criar", entidade: "afazer", entidadeId: a.id, dados: { titulo: r.data.titulo } });
   recarregar();
   return { ok: "Tarefa criada.", valores: { responsavelId: valores.responsavelId ?? "", empresaId: valores.empresaId ?? "" } };
 }
+
+/** Todos veem as tarefas de todos; a equipe só mexe nas próprias, os sócios em todas. */
+const podeMexer = (admin: { id: string; socio: boolean }) => (admin.socio ? undefined : eq(afazeres.responsavelId, admin.id));
 
 export async function concluirAfazer(id: string, feito: boolean) {
   const admin = await exigirSuperadmin();
@@ -208,7 +213,7 @@ export async function concluirAfazer(id: string, feito: boolean) {
   const [a] = await db
     .update(afazeres)
     .set(feito ? { feitoEm: new Date(), feitoPor: admin.id } : { feitoEm: null, feitoPor: null })
-    .where(eq(afazeres.id, id))
+    .where(and(eq(afazeres.id, id), podeMexer(admin)))
     .returning({ titulo: afazeres.titulo, empresaId: afazeres.empresaId });
   if (a && feito)
     await registrarAuditoria(db, { empresaId: a.empresaId, usuarioId: admin.id, ator: "usuario", acao: "afazer.feito", entidade: "afazer", entidadeId: id, dados: { titulo: a.titulo } });
@@ -216,7 +221,19 @@ export async function concluirAfazer(id: string, feito: boolean) {
 }
 
 export async function excluirAfazer(id: string) {
-  await exigirSuperadmin();
-  await obterDb().delete(afazeres).where(eq(afazeres.id, id));
+  const admin = await exigirSuperadmin();
+  await obterDb().delete(afazeres).where(and(eq(afazeres.id, id), podeMexer(admin)));
+  recarregar();
+}
+
+/** Sócio define quem é sócio e quem é equipe (sócio vê as finanças da Urutau). Não dá para tirar o próprio papel. */
+export async function definirPapelEquipe(usuarioId: string, fd: FormData) {
+  const admin = await exigirSocio();
+  const papel = String(fd.get("papel") ?? "");
+  if (papel !== "socio" && papel !== "equipe") return;
+  if (usuarioId === admin.id && papel !== "socio") return;
+  const db = obterDb();
+  const [u] = await db.update(usuarios).set({ papelEquipe: papel }).where(and(eq(usuarios.id, usuarioId), eq(usuarios.superadmin, true))).returning({ nome: usuarios.nome });
+  if (u) await registrarAuditoria(db, { usuarioId: admin.id, ator: "admin", acao: "equipe.papel", entidade: "usuario", entidadeId: usuarioId, dados: { nome: u.nome, papel } });
   recarregar();
 }

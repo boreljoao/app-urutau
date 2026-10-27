@@ -33,7 +33,7 @@ Acessos de exemplo (senha `urutau123`):
 | `dono@urutau.dev` | Dono | Tudo; tem também uma segunda empresa (MEI) |
 | `colaborador@urutau.dev` | Colaborador | Lança vendas/despesas e vê só o que lançou |
 | `contador@urutau.dev` | Contador | Painel e lançamentos, somente leitura |
-| `ottaviano@urutau.dev`, `borel@`, `vinicius@`, `wanderley@` | Equipe Urutau | Central Urutau (`/admin`): a área de cada pessoa com metas, anotações e clientes; todas as empresas |
+| `ottaviano@urutau.dev` e `borel@` (sócios), `vinicius@`, `wanderley@`, `matheus@` (equipe) | Equipe Urutau | Central Urutau (`/admin`): a área de cada pessoa com metas, anotações e clientes; todas as empresas |
 
 Empresas de exemplo do `dono@`: **Padaria e Café Urutau** (Simples, Anexos I e III, com funcionários e dívidas),
 **Marina Doces** (MEI perto do limite anual), **Estúdio Urutau Design** (Simples Anexo V com Fator R, que passa
@@ -169,4 +169,7 @@ tests/                 Vitest
    quem está online e em qual tela, o que aconteceu na equipe e nos clientes, e os sinais do site urutau.io
 7. ✅ Comercial da Urutau: leads (site, diagnóstico, ligação, indicação, prospecção), funil em colunas, histórico de contatos
    com retorno marcado, propostas (mensal + entrada), mapa dos leads e importação do CSV do robô do Google Maps
-8. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp
+8. ✅ Receita da Urutau: papéis sócio/equipe, clientes da Urutau com contratos (prazo, desconto, multa), serviços com quem executa,
+   cobranças mensais, comissões que nascem quando o cliente paga (10% de quem trouxe + % de quem executa, regra congelada no
+   contrato), custos, divisão teórica dos sócios com reserva de caixa, painel da Receita (só sócios) e Meus ganhos (cada pessoa)
+9. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp
