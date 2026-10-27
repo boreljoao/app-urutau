@@ -4,6 +4,7 @@ import { Presenca } from "@/components/Presenca";
 import { NOME_PAPEL, pode } from "@/lib/permissoes";
 import { obterDb } from "@/db";
 import { exigirAcesso } from "@/lib/servidor/acesso";
+import { resumoDaLoja } from "@/lib/servidor/atendimento";
 import { contarParaConferir } from "@/lib/servidor/conferencia";
 
 export default async function LayoutEmpresa({
@@ -14,9 +15,15 @@ export default async function LayoutEmpresa({
   params: Promise<{ empresaId: string }>;
 }) {
   const { empresaId } = await params;
-  const { empresa, papel, comoAdmin } = await exigirAcesso(empresaId);
+  const { empresa, papel, comoAdmin, modulos } = await exigirAcesso(empresaId);
   const base = `/e/${empresaId}`;
-  const aConferir = pode(papel, "conferir") ? await contarParaConferir(obterDb(), empresaId) : 0;
+  const db = obterDb();
+  const [aConferir, atendimento] = await Promise.all([
+    pode(papel, "conferir") ? contarParaConferir(db, empresaId) : 0,
+    modulos.has("whatsapp") && pode(papel, "lancar") ? resumoDaLoja(db, empresaId) : null,
+  ]);
+  // Conversas que pedem alguém da loja: respostas para aprovar e clientes que o agente passou para a equipe.
+  const esperando = atendimento ? atendimento.aprovar + atendimento.comEquipe : 0;
   return (
     <div className="min-h-dvh pb-28">
       <header className="sticky top-0 z-10 border-b border-borda bg-fundo/95 backdrop-blur">
@@ -36,6 +43,11 @@ export default async function LayoutEmpresa({
       {aConferir > 0 && (
         <Link href={`${base}/conferir`} className="block border-b border-borda bg-aviso-fundo px-4 py-2 text-center text-sm font-medium">
           {aConferir === 1 ? "1 venda entrou sozinha e espera" : `${aConferir} vendas entraram sozinhas e esperam`} o seu check ›
+        </Link>
+      )}
+      {esperando > 0 && (
+        <Link href={`${base}/whatsapp?f=${atendimento!.aprovar > 0 ? "aprovar" : "humano"}`} className="block border-b border-borda bg-aviso-fundo px-4 py-2 text-center text-sm font-medium">
+          {esperando === 1 ? "1 conversa no WhatsApp espera" : `${esperando} conversas no WhatsApp esperam`} por você ›
         </Link>
       )}
       {papel === "contador" && (

@@ -1134,3 +1134,104 @@ export const parametrosCentral = pgTable("parametros_central", {
 
 export type ServicoUrutau = (typeof servicoUrutauEnum.enumValues)[number];
 export type Recorrencia = (typeof recorrenciaEnum.enumValues)[number];
+
+// ─── Atendimento no WhatsApp (agente de IA de cada loja) ─────────────────────
+
+/** automático = responde sozinho; aprovação = escreve e um humano aprova; desligado = só registra. */
+export const modoAgenteEnum = pgEnum("modo_agente", ["automatico", "aprovacao", "desligado"]);
+/** Com quem está a conversa agora. */
+export const statusConversaEnum = pgEnum("status_conversa", ["agente", "humano", "encerrada"]);
+export const autorMensagemEnum = pgEnum("autor_mensagem", ["cliente", "agente", "humano", "sistema"]);
+export const statusMensagemEnum = pgEnum("status_mensagem", ["recebida", "rascunho", "pendente", "enviada", "entregue", "lida", "falhou", "descartada"]);
+/** simulador = teste dentro do painel, sem WhatsApp e sem custo da Meta. */
+export const canalConversaEnum = pgEnum("canal_conversa", ["whatsapp", "simulador"]);
+
+/**
+ * O agente de atendimento de uma loja: quem ele é, o que sabe do negócio e como se conecta
+ * ao número da loja na API oficial do WhatsApp (Cloud API). O token da Meta fica cifrado.
+ */
+export const agentesWhatsapp = pgTable(
+  "agentes_whatsapp",
+  {
+    empresaId: uuid("empresa_id")
+      .primaryKey()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    nome: text("nome").notNull().default("Atendente"),
+    /** Jeito de falar: "simpática e direta", "formal"… */
+    tom: text("tom").notNull().default(""),
+    /** O que o agente precisa saber: produtos, preços, horários, entrega, pagamento, regras. */
+    conhecimento: text("conhecimento").notNull().default(""),
+    /** Quando chamar uma pessoa da loja. */
+    quandoChamarHumano: text("quando_chamar_humano").notNull().default(""),
+    modo: modoAgenteEnum("modo").notNull().default("aprovacao"),
+    modelo: text("modelo").notNull().default("claude-opus-5-5"),
+    /** Cloud API: o phone_number_id do número da loja (chega em todo webhook). */
+    phoneNumberId: text("phone_number_id").unique(),
+    numeroExibicao: text("numero_exibicao"),
+    tokenCifrado: text("token_cifrado"),
+    ultimoErro: text("ultimo_erro"),
+    ultimoErroEm: timestamp("ultimo_erro_em", { withTimezone: true }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+);
+
+export const conversas = pgTable(
+  "conversas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    canal: canalConversaEnum("canal").notNull(),
+    /** Só dígitos, com DDI (o "wa_id" do WhatsApp). */
+    telefone: text("telefone").notNull(),
+    nome: text("nome"),
+    clienteId: uuid("cliente_id").references(() => clientes.id, { onDelete: "set null" }),
+    status: statusConversaEnum("status").notNull().default("agente"),
+    /** Última mensagem do cliente: abre a janela de 24h em que a loja pode responder. */
+    ultimaEntradaEm: timestamp("ultima_entrada_em", { withTimezone: true }),
+    ultimaMensagemEm: timestamp("ultima_mensagem_em", { withTimezone: true }).notNull().defaultNow(),
+    naoLidas: integer("nao_lidas").notNull().default(0),
+    /** O que o cliente quer (o agente anota): comprar, agendar, dúvida, reclamação… */
+    intencao: text("intencao"),
+    resumo: text("resumo"),
+    motivoHumano: text("motivo_humano"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [unique("conversas_empresa_canal_tel").on(t.empresaId, t.canal, t.telefone), index("conversas_recentes_idx").on(t.empresaId, t.ultimaMensagemEm)],
+);
+
+export const mensagensWhatsapp = pgTable(
+  "mensagens_whatsapp",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversaId: uuid("conversa_id")
+      .notNull()
+      .references(() => conversas.id, { onDelete: "cascade" }),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    autor: autorMensagemEnum("autor").notNull(),
+    texto: text("texto").notNull(),
+    /** Id da mensagem no WhatsApp: evita gravar duas vezes o mesmo webhook. */
+    waMessageId: text("wa_message_id").unique(),
+    status: statusMensagemEnum("status").notNull(),
+    erro: text("erro"),
+    usuarioId: uuid("usuario_id").references(() => usuarios.id, { onDelete: "set null" }),
+    /** Ferramentas que o agente usou para chegar nesta resposta. */
+    acoes: jsonb("acoes").$type<{ nome: string; resumo: string }[]>(),
+    tokensEntrada: integer("tokens_entrada"),
+    tokensSaida: integer("tokens_saida"),
+    tokensCache: integer("tokens_cache"),
+    /** Custo estimado em milionésimos de dólar (IA + mensagem da Meta). */
+    custoMicrosUsd: integer("custo_micros_usd"),
+    /** Quanto o agente levou para responder (ms), desde a mensagem do cliente. */
+    tempoRespostaMs: integer("tempo_resposta_ms"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("mensagens_conversa_idx").on(t.conversaId, t.criadoEm), index("mensagens_empresa_idx").on(t.empresaId, t.criadoEm)],
+);
+
+export type ModoAgente = (typeof modoAgenteEnum.enumValues)[number];
+export type StatusConversa = (typeof statusConversaEnum.enumValues)[number];

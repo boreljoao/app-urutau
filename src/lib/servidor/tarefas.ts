@@ -100,4 +100,11 @@ export const MANIPULADORES: Record<string, Manipulador> = {
     if (!empresa) return; // empresa excluída depois de enfileirar
     await prepararEmpresa(db, empresa, mesAtual());
   },
+  // Import tardio: o atendimento enfileira por este módulo, e o ciclo de imports quebraria a carga.
+  whatsapp_responder: async (db, t) => {
+    const conversaId = t.dados.conversaId;
+    if (typeof conversaId !== "string") throw new Error("whatsapp_responder sem conversa");
+    const { responderConversa } = await import("./atendimento");
+    await responderConversa(db, conversaId);
+  },
 };

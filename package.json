@@ -19,6 +19,7 @@
     "admin": "tsx scripts/superadmin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@fontsource/dm-sans": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
     "@node-rs/argon2": "^2.2.2",
