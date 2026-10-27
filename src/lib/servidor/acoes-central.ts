@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { obterDb } from "@/db";
-import { empresas, metas, notasEquipe, sessoes, usuarios } from "@/db/schema";
+import { afazeres, empresas, metas, notasEquipe, sessoes, usuarios } from "@/db/schema";
 import { intervaloDoMes, mesAtual } from "@/lib/datas";
 import { lerReais } from "@/lib/dinheiro";
 import type { EstadoForm } from "@/lib/estado-form";
@@ -174,4 +174,49 @@ export async function redefinirSenhaEquipe(usuarioId: string): Promise<{ erro?: 
   });
   await registrarAuditoria(db, { usuarioId: admin.id, ator: "admin", acao: "equipe.senha", entidade: "usuario", entidadeId: usuarioId, dados: { nome: p.nome } });
   return { senha };
+}
+
+const esquemaAfazer = z.object({
+  titulo: z.string().trim().min(2, "Escreva a tarefa").max(140),
+  responsavelId: z.string().uuid().optional().or(z.literal("").transform(() => undefined)),
+  empresaId: z.string().uuid().optional().or(z.literal("").transform(() => undefined)),
+  prazo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+});
+
+export async function criarAfazer(_: EstadoForm, fd: FormData): Promise<EstadoForm> {
+  const admin = await exigirSuperadmin();
+  const valores = formParaObjeto(fd);
+  const r = esquemaAfazer.safeParse(valores);
+  if (!r.success) return { erros: errosPorCampo(r.error), valores };
+  const db = obterDb();
+  const [a] = await db
+    .insert(afazeres)
+    .values({ titulo: r.data.titulo, responsavelId: r.data.responsavelId ?? null, empresaId: r.data.empresaId ?? null, prazo: r.data.prazo ?? null, criadoPor: admin.id })
+    .returning({ id: afazeres.id });
+  await registrarAuditoria(db, { empresaId: r.data.empresaId ?? null, usuarioId: admin.id, ator: "usuario", acao: "afazer.criar", entidade: "afazer", entidadeId: a.id, dados: { titulo: r.data.titulo } });
+  recarregar();
+  return { ok: "Tarefa criada.", valores: { responsavelId: valores.responsavelId ?? "", empresaId: valores.empresaId ?? "" } };
+}
+
+export async function concluirAfazer(id: string, feito: boolean) {
+  const admin = await exigirSuperadmin();
+  const db = obterDb();
+  const [a] = await db
+    .update(afazeres)
+    .set(feito ? { feitoEm: new Date(), feitoPor: admin.id } : { feitoEm: null, feitoPor: null })
+    .where(eq(afazeres.id, id))
+    .returning({ titulo: afazeres.titulo, empresaId: afazeres.empresaId });
+  if (a && feito)
+    await registrarAuditoria(db, { empresaId: a.empresaId, usuarioId: admin.id, ator: "usuario", acao: "afazer.feito", entidade: "afazer", entidadeId: id, dados: { titulo: a.titulo } });
+  recarregar();
+}
+
+export async function excluirAfazer(id: string) {
+  await exigirSuperadmin();
+  await obterDb().delete(afazeres).where(eq(afazeres.id, id));
+  recarregar();
 }

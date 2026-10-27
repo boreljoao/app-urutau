@@ -64,6 +64,13 @@
       "when": 1793066012779,
       "tag": "0008_fase6_central_equipe",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793068809077,
+      "tag": "0009_fase6_afazeres",
+      "breakpoints": true
     }
   ]
 }

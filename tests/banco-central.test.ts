@@ -7,8 +7,8 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { criarConexao } from "@/db";
 import { criarPadroesDaEmpresa } from "@/db/padroes";
-import { auditoria, empresaUsuarios, empresas, eventosSite, fontesReceita, metas, notasEquipe, usuarios, vendas } from "@/db/schema";
-import { atividadeRecente, empresasDaCentral, listarEquipe, metasDoMes, notasRecentes, pessoasOnlineNasEmpresas, resumoDoSite } from "@/lib/servidor/central";
+import { afazeres, auditoria, empresaUsuarios, empresas, eventosSite, fontesReceita, metas, notasEquipe, usuarios, vendas } from "@/db/schema";
+import { afazeresFeitosDesde, atividadeRecente, contatosRecentesDoSite, detalhesDoCliente, empresasDaCentral, listarAfazeres, listarEquipe, metasDoMes, movimentoDiario, notasRecentes, pessoasOnlineNasEmpresas, resumoDoSite } from "@/lib/servidor/central";
 
 const url = process.env.TEST_DATABASE_URL;
 const { db, cliente } = criarConexao(url ?? "postgres://invalido");
@@ -121,5 +121,54 @@ describe("site urutau.io", () => {
     const r = await resumoDoSite(db, 7, agora);
     expect(r).toMatchObject({ visitas: 2, contatos: 1, whatsapp: 0, algumDia: true });
     expect(r.ultimos.map((u) => u.nome)).toEqual(["Ana"]);
+  });
+});
+
+describe("dashboard da Central", () => {
+  it("compara com o mesmo período do mês anterior", async () => {
+    await db.insert(vendas).values([
+      { empresaId: loja.id, data: "2026-09-10", valorCentavos: 100_000, fonteReceitaId: loja.fonteId, formaPagamento: "pix", status: "recebido", dataRecebimento: "2026-09-10" },
+      { empresaId: loja.id, data: "2026-09-29", valorCentavos: 777_000, fonteReceitaId: loja.fonteId, formaPagamento: "pix", status: "recebido", dataRecebimento: "2026-09-29" },
+    ]);
+    // Hoje é 27/10: conta setembro só até o dia 27 (a venda do dia 29 fica de fora; a do dia 30 também).
+    const [l] = (await empresasDaCentral(db, "2026-10", gabriel.id, "2026-10-27"));
+    expect(l.vendasMesAnterior).toBe(100_000);
+    expect(l.conferirDesde).toBeInstanceOf(Date);
+  });
+
+  it("movimento por dia: este mês até hoje e o mês anterior inteiro", async () => {
+    const dias = await movimentoDiario(db, "2026-10", "2026-10-27");
+    expect(dias).toHaveLength(31);
+    expect(dias.find((d) => d.dia === 5)).toMatchObject({ atual: 300_000 });
+    expect(dias.find((d) => d.dia === 10)).toMatchObject({ atual: 0, anterior: 100_000 });
+    expect(dias.find((d) => d.dia === 30)).toMatchObject({ atual: null, anterior: 999_999 });
+    expect(dias.find((d) => d.dia === 31)).toMatchObject({ atual: null, anterior: null });
+  });
+
+  it("tarefas abertas por prazo (sem prazo por último) e feitas à parte", async () => {
+    await db.insert(afazeres).values([
+      { titulo: "sem prazo", responsavelId: gabriel.id },
+      { titulo: "depois", responsavelId: gabriel.id, prazo: "2026-10-30", empresaId: loja.id },
+      { titulo: "antes", responsavelId: vinicius.id, prazo: "2026-10-20" },
+      { titulo: "feita", responsavelId: gabriel.id, feitoEm: new Date(agora.getTime() - 3_600_000) },
+    ]);
+    expect((await listarAfazeres(db)).map((a) => a.titulo)).toEqual(["antes", "depois", "sem prazo"]);
+    expect((await listarAfazeres(db, { responsavelId: gabriel.id })).map((a) => a.titulo)).toEqual(["depois", "sem prazo"]);
+    const [doCliente] = await listarAfazeres(db, { empresaId: loja.id });
+    expect(doCliente).toMatchObject({ titulo: "depois", responsavel: "Gabriel Ottaviano", empresa: "Urutau Veículos" });
+    expect((await listarAfazeres(db, { feitos: true })).map((a) => a.titulo)).toEqual(["feita"]);
+    expect(await afazeresFeitosDesde(db, 7, agora)).toBe(1);
+  });
+
+  it("detalhes do cliente: quem usa, últimas vendas e clientes cadastrados", async () => {
+    const d = await detalhesDoCliente(db, loja.id);
+    expect(d.membros.map((m) => m.email)).toEqual(["rafael@loja.com"]);
+    expect(d.ultimasVendas[0].data).toBe("2026-10-20");
+    expect(d.clientesCadastrados).toBe(0);
+  });
+
+  it("contatos do site das últimas 48 horas, sem as visitas", async () => {
+    const r = await contatosRecentesDoSite(db, 48, agora);
+    expect(r.map((c) => c.nome)).toEqual(["Ana"]);
   });
 });

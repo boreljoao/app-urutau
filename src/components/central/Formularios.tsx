@@ -104,7 +104,7 @@ export function FormAvanco({ acao, valor }: { acao: Acao; valor: boolean }) {
   );
 }
 
-export function FormNota({ acao, equipe, sobreUsuarioId, empresas = [] }: { acao: Acao; equipe: Pessoa[]; sobreUsuarioId?: string; empresas?: Pessoa[] }) {
+export function FormNota({ acao, equipe, sobreUsuarioId, empresas = [], empresaId }: { acao: Acao; equipe: Pessoa[]; sobreUsuarioId?: string; empresas?: Pessoa[]; empresaId?: string }) {
   const [estado, enviar, pendente] = useActionState(acao, {});
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -112,9 +112,9 @@ export function FormNota({ acao, equipe, sobreUsuarioId, empresas = [] }: { acao
   }, [estado]);
   return (
     <form ref={ref} action={enviar} className="space-y-2">
-      <label className="sr-only" htmlFor={`texto-${sobreUsuarioId ?? "geral"}`}>Anotação</label>
+      <label className="sr-only" htmlFor={`texto-${sobreUsuarioId ?? empresaId ?? "geral"}`}>Anotação</label>
       <textarea
-        id={`texto-${sobreUsuarioId ?? "geral"}`}
+        id={`texto-${sobreUsuarioId ?? empresaId ?? "geral"}`}
         name="texto"
         required
         maxLength={2000}
@@ -133,7 +133,8 @@ export function FormNota({ acao, equipe, sobreUsuarioId, empresas = [] }: { acao
             ))}
           </select>
         )}
-        {empresas.length > 0 && (
+        {empresaId && <input type="hidden" name="empresaId" value={empresaId} />}
+        {!empresaId && empresas.length > 0 && (
           <select name="empresaId" aria-label="Sobre o cliente" defaultValue="" className="campo !min-h-8 !w-auto !py-1 text-[13px]">
             <option value="">Sem cliente</option>
             {empresas.map((p) => (

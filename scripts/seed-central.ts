@@ -5,8 +5,8 @@
  */
 import { eq } from "drizzle-orm";
 import type { BancoDeDados } from "../src/db";
-import { auditoria, empresas, eventosSite, metas, notasEquipe, usuarios } from "../src/db/schema";
-import { intervaloDoMes, mesAtual } from "../src/lib/datas";
+import { afazeres, auditoria, empresas, eventosSite, metas, notasEquipe, usuarios } from "../src/db/schema";
+import { hoje, intervaloDoMes, mesAtual, somarDias } from "../src/lib/datas";
 
 const minutos = (m: number) => new Date(Date.now() - m * 60_000);
 
@@ -56,6 +56,20 @@ export async function semearCentral(db: BancoDeDados, c: { senhaHash: string; ad
     { usuarioId: borel.id, ator: "usuario", acao: "meta.progresso", dados: { titulo: "Entregar a Central da equipe" }, criadoEm: minutos(80) },
     { usuarioId: vinicius.id, empresaId: loja?.id, ator: "admin", acao: "admin.modulos", criadoEm: minutos(60 * 5) },
     { usuarioId: gabriel.id, ator: "admin", acao: "equipe.adicionar", dados: { nome: "Wanderley" }, criadoEm: minutos(60 * 30) },
+  ]);
+
+  const hojeData = hoje();
+  const padaria = lista.find((e) => e.nome === "Padaria e Café Urutau");
+  await db.insert(afazeres).values([
+    { titulo: "Mandar proposta do atendente de WhatsApp", responsavelId: gabriel.id, empresaId: loja?.id, prazo: somarDias(hojeData, 2), criadoPor: gabriel.id },
+    { titulo: "Ligar para conferir as vendas paradas", responsavelId: gabriel.id, empresaId: loja?.id, prazo: somarDias(hojeData, -2), criadoPor: borel.id },
+    { titulo: "Publicar o site da Betânia", responsavelId: borel.id, prazo: hojeData, criadoPor: borel.id },
+    { titulo: "Ligar o site urutau.io à Central", responsavelId: borel.id, prazo: somarDias(hojeData, 5), criadoPor: borel.id },
+    { titulo: "Orçamento de tráfego para dezembro", responsavelId: vinicius.id, empresaId: padaria?.id, prazo: somarDias(hojeData, 1), criadoPor: wanderley.id },
+    { titulo: "Calendário de posts de novembro", responsavelId: wanderley.id, prazo: somarDias(hojeData, 4), criadoPor: vinicius.id },
+    { titulo: "Responder a Ana Ribeiro (contato do site)", criadoPor: vinicius.id },
+    { titulo: "Treinar a loja na caixa de conferência", responsavelId: gabriel.id, empresaId: loja?.id, feitoEm: minutos(60 * 20), feitoPor: gabriel.id, criadoPor: gabriel.id },
+    { titulo: "Revisar metas de outubro", responsavelId: vinicius.id, feitoEm: minutos(60 * 50), feitoPor: vinicius.id, criadoPor: vinicius.id },
   ]);
 
   await db.insert(eventosSite).values([

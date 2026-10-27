@@ -155,9 +155,105 @@ export function descreverAcao(acao: string, dados: Record<string, unknown> | nul
       return `colocou ${t("nome") || "alguém"} na equipe`;
     case "equipe.senha":
       return `gerou uma senha nova para ${t("nome") || "alguém"}`;
+    case "afazer.criar":
+      return `criou a tarefa "${t("titulo")}"`;
+    case "afazer.feito":
+      return `concluiu "${t("titulo")}"`;
     case "conta.trocar_senha":
       return "trocou a própria senha";
     default:
       return acao.replace(/[._]/g, " ");
   }
+}
+
+// ─── Precisa de atenção ──────────────────────────────────────────────────────
+
+export interface EntradaAtencao {
+  agora: Date;
+  hoje: string;
+  empresas: {
+    id: string;
+    nome: string;
+    responsavelId: string | null;
+    aConferir: number;
+    /** Quando entrou a venda mais antiga que espera conferência. */
+    conferirDesde: Date | null;
+    ultimoAcesso: Date | null;
+    criadoEm: Date;
+  }[];
+  afazeresAtrasados: { id: string; titulo: string; prazo: string; responsavel: string | null }[];
+  contatosSite: { id: string; tipo: string; nome: string | null; contato: string | null; criadoEm: Date }[];
+  senhasProvisorias: { id: string; nome: string }[];
+}
+
+export interface ItemAtencao {
+  chave: string;
+  nivel: "alto" | "medio";
+  texto: string;
+  detalhe?: string;
+  link: string;
+}
+
+const DIA_MS = 86_400_000;
+const diasDesde = (d: Date, agora: Date) => Math.floor((agora.getTime() - d.getTime()) / DIA_MS);
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+/**
+ * A fila do que a equipe precisa resolver, montada sozinha a partir dos dados:
+ * vendas paradas sem conferência, clientes que sumiram do app, tarefas vencidas,
+ * contatos do site e contas com senha provisória. O que é urgente vem primeiro.
+ */
+export function montarAtencao(e: EntradaAtencao): ItemAtencao[] {
+  const itens: ItemAtencao[] = [];
+  for (const c of e.contatosSite) {
+    const quem = c.nome ?? (c.tipo === "whatsapp" ? "Alguém" : "Um visitante");
+    itens.push({
+      chave: `site-${c.id}`,
+      nivel: "alto",
+      texto: c.tipo === "whatsapp" ? `${quem} clicou no WhatsApp do site` : `${quem} pediu contato pelo site`,
+      detalhe: [c.contato, quando(c.criadoEm, e.agora)].filter(Boolean).join(" · "),
+      link: "/admin#site",
+    });
+  }
+  for (const a of e.afazeresAtrasados) {
+    const [, m, d] = a.prazo.split("-");
+    itens.push({
+      chave: `afazer-${a.id}`,
+      nivel: "alto",
+      texto: `${a.titulo} venceu em ${d}/${m}`,
+      detalhe: a.responsavel ? `com ${primeiroNome(a.responsavel)}` : "sem responsável",
+      link: "/admin#afazeres",
+    });
+  }
+  for (const emp of e.empresas) {
+    const link = `/admin/empresas/${emp.id}`;
+    if (emp.aConferir > 0) {
+      const dias = emp.conferirDesde ? diasDesde(emp.conferirDesde, e.agora) : 0;
+      itens.push({
+        chave: `conferir-${emp.id}`,
+        nivel: dias >= 2 ? "alto" : "medio",
+        texto: `${plural(emp.aConferir, "venda", "vendas")} de ${emp.nome} ${emp.aConferir === 1 ? "espera" : "esperam"} o check do dono`,
+        detalhe: dias >= 1 ? `a mais antiga há ${plural(dias, "dia", "dias")}` : "chegou hoje",
+        link,
+      });
+    }
+    if (!emp.ultimoAcesso) {
+      if (diasDesde(emp.criadoEm, e.agora) >= 3)
+        itens.push({ chave: `acesso-${emp.id}`, nivel: "medio", texto: `${emp.nome} ainda não entrou no app`, detalhe: "vale uma ligação de boas-vindas", link });
+    } else {
+      const dias = diasDesde(emp.ultimoAcesso, e.agora);
+      if (dias >= 7) itens.push({ chave: `acesso-${emp.id}`, nivel: "medio", texto: `${emp.nome} não entra no app há ${dias} dias`, link });
+    }
+    if (!emp.responsavelId)
+      itens.push({ chave: `resp-${emp.id}`, nivel: "medio", texto: `${emp.nome} está sem responsável na equipe`, link: "/admin/empresas" });
+  }
+  for (const p of e.senhasProvisorias)
+    itens.push({ chave: `senha-${p.id}`, nivel: "medio", texto: `${primeiroNome(p.nome)} ainda usa a senha provisória`, link: "/admin/equipe" });
+  return itens.sort((a, b) => (a.nivel === b.nivel ? 0 : a.nivel === "alto" ? -1 : 1));
+}
+
+/** "+12% sobre o mesmo período de setembro"; null quando não há base para comparar. */
+export function variacao(atual: number, anterior: number): number | null {
+  if (anterior <= 0) return null;
+  return Math.round(((atual - anterior) / anterior) * 100);
 }

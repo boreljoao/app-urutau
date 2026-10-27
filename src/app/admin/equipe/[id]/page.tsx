@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FormAfazer } from "@/components/central/Afazeres";
 import { BotaoLinha, FormMeta, FormNota, Gaveta } from "@/components/central/Formularios";
+import { ListaAfazeres } from "@/components/central/Listas";
 import { Linhas } from "@/components/central/Linhas";
 import { ListaMetas } from "@/components/central/ListaMetas";
 import { Avatar, Ponto, TituloBloco, Vazio } from "@/components/central/Pecas";
@@ -9,8 +11,8 @@ import { PERFIS } from "@/lib/perfis";
 import { fracaoDoMes, presenca, primeiroNome, quando, ritmo, rotuloDaTela } from "@/lib/central";
 import { hoje, mesAtual, nomeDoMes } from "@/lib/datas";
 import { formatarReais } from "@/lib/dinheiro";
-import { criarMeta, criarNota, excluirNota, fixarNota } from "@/lib/servidor/acoes-central";
-import { atividadeRecente, empresasDaCentral, listarEquipe, metasDoMes, notasRecentes } from "@/lib/servidor/central";
+import { criarAfazer, criarMeta, criarNota, excluirNota, fixarNota } from "@/lib/servidor/acoes-central";
+import { atividadeRecente, empresasDaCentral, listarAfazeres, listarEquipe, metasDoMes, notasRecentes } from "@/lib/servidor/central";
 
 export const dynamic = "force-dynamic";
 
@@ -30,13 +32,15 @@ export default async function AreaDaPessoa({ params }: { params: Promise<{ id: s
   const i = equipe.findIndex((p) => p.id === id);
   if (i < 0) notFound();
   const p = equipe[i];
-  const [metas, clientes, todasEmpresas, notas, atividade] = await Promise.all([
+  const [metas, clientes, todasEmpresas, notas, atividade, tarefas] = await Promise.all([
     metasDoMes(db, mes, id),
     empresasDaCentral(db, mes, id),
     empresasDaCentral(db, mes),
     notasRecentes(db, { sobreUsuarioId: id, limite: 12 }),
     atividadeRecente(db, { usuarioId: id, limite: 10 }),
+    listarAfazeres(db, { responsavelId: id }),
   ]);
+  const hojeData = hoje(agora);
   const st = presenca(p.vistoEm, agora);
   const onde = st.estado === "online" ? rotuloDaTela(p.ondeEsta, (eid) => todasEmpresas.find((e) => e.id === eid)?.nome) : null;
   const nome = primeiroNome(p.nome);
@@ -122,7 +126,17 @@ export default async function AreaDaPessoa({ params }: { params: Promise<{ id: s
           </section>
         </div>
 
-        <section className="cartao h-fit" aria-labelledby="t-notas">
+        <div className="space-y-3">
+        <section className="cartao" aria-labelledby="t-tarefas">
+          <TituloBloco>
+            <span id="t-tarefas">Tarefas de {nome}</span>
+          </TituloBloco>
+          <FormAfazer acao={criarAfazer} equipe={pessoas} empresas={todasEmpresas.map((e) => ({ id: e.id, nome: e.nome }))} responsavelId={id} />
+          <div className="mt-4">
+            <ListaAfazeres itens={tarefas} hoje={hojeData} posicao={new Map(equipe.map((x, j) => [x.id, j]))} vazio={`${nome} está sem tarefas abertas.`} mostrarDono={false} />
+          </div>
+        </section>
+        <section className="cartao" aria-labelledby="t-notas">
           <TituloBloco>
             <span id="t-notas">Anotações na área de {nome}</span>
           </TituloBloco>
@@ -141,6 +155,7 @@ export default async function AreaDaPessoa({ params }: { params: Promise<{ id: s
             ))}
           </ul>
         </section>
+        </div>
       </div>
     </div>
   );

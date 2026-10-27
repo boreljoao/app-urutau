@@ -745,6 +745,23 @@ export const notasEquipe = pgTable(
   (t) => [index("notas_equipe_criado_idx").on(t.criadoEm)],
 );
 
+/** Tarefas da equipe Urutau: o que cada um tem para fazer, com prazo e cliente opcionais. */
+export const afazeres = pgTable(
+  "afazeres",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    titulo: text("titulo").notNull(),
+    responsavelId: uuid("responsavel_id").references(() => usuarios.id, { onDelete: "set null" }),
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+    prazo: date("prazo"),
+    feitoEm: timestamp("feito_em", { withTimezone: true }),
+    feitoPor: uuid("feito_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("afazeres_abertos_idx").on(t.feitoEm, t.prazo)],
+);
+
 /** O que o site urutau.io manda (POST /api/site/evento): visitas, contatos, cliques no WhatsApp. */
 export const eventosSite = pgTable(
   "eventos_site",

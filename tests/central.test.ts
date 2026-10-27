@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { descreverAcao, fracaoDoMes, iniciais, matizDa, porcentagem, presenca, primeiroNome, quando, ritmo, rotuloDaTela } from "@/lib/central";
+import { descreverAcao, fracaoDoMes, iniciais, matizDa, montarAtencao, porcentagem, presenca, primeiroNome, quando, ritmo, rotuloDaTela, variacao } from "@/lib/central";
 
 const agora = new Date("2026-10-27T15:00:00-03:00");
 const minutosAntes = (m: number) => new Date(agora.getTime() - m * 60_000);
@@ -74,5 +74,68 @@ describe("pessoas", () => {
     expect(descreverAcao("meta.progresso", { titulo: "Fechar 3 clientes" })).toBe('avançou na meta "Fechar 3 clientes"');
     expect(descreverAcao("venda.conferir", null)).toBe("conferiu uma venda");
     expect(descreverAcao("algo.novo", null)).toBe("algo novo");
+  });
+});
+
+describe("precisa de atenção", () => {
+  const base = { agora, hoje: "2026-10-27", afazeresAtrasados: [], contatosSite: [], senhasProvisorias: [] };
+  const empresa = {
+    id: "e1",
+    nome: "Urutau Veículos",
+    responsavelId: "g",
+    aConferir: 0,
+    conferirDesde: null,
+    ultimoAcesso: minutosAntes(30),
+    criadoEm: new Date("2026-01-10T12:00:00-03:00"),
+  };
+
+  it("cliente em dia não gera nada", () => {
+    expect(montarAtencao({ ...base, empresas: [empresa] })).toEqual([]);
+  });
+
+  it("venda parada há dias é urgente; a de hoje é só aviso", () => {
+    const parada = montarAtencao({ ...base, empresas: [{ ...empresa, aConferir: 3, conferirDesde: minutosAntes(60 * 24 * 4) }] });
+    expect(parada[0]).toMatchObject({ nivel: "alto", texto: "3 vendas de Urutau Veículos esperam o check do dono", detalhe: "a mais antiga há 4 dias" });
+    const deHoje = montarAtencao({ ...base, empresas: [{ ...empresa, aConferir: 1, conferirDesde: minutosAntes(90) }] });
+    expect(deHoje[0]).toMatchObject({ nivel: "medio", texto: "1 venda de Urutau Veículos espera o check do dono", detalhe: "chegou hoje" });
+  });
+
+  it("cliente sumido, cliente que nunca entrou e cliente sem responsável", () => {
+    const itens = montarAtencao({
+      ...base,
+      empresas: [
+        { ...empresa, id: "a", nome: "Marina Doces", ultimoAcesso: minutosAntes(60 * 24 * 12) },
+        { ...empresa, id: "b", nome: "Clínica Nova", ultimoAcesso: null, criadoEm: minutosAntes(60 * 24 * 5) },
+        { ...empresa, id: "c", nome: "Recém-chegada", ultimoAcesso: null, criadoEm: minutosAntes(60) },
+        { ...empresa, id: "d", nome: "Sem Dono", responsavelId: null },
+      ],
+    }).map((i) => i.texto);
+    expect(itens).toEqual([
+      "Marina Doces não entra no app há 12 dias",
+      "Clínica Nova ainda não entrou no app",
+      "Sem Dono está sem responsável na equipe",
+    ]);
+  });
+
+  it("contato do site e tarefa vencida vêm antes dos avisos", () => {
+    const itens = montarAtencao({
+      ...base,
+      empresas: [{ ...empresa, responsavelId: null }],
+      afazeresAtrasados: [{ id: "t", titulo: "Mandar proposta", prazo: "2026-10-25", responsavel: "Gabriel Ottaviano" }],
+      contatosSite: [{ id: "s", tipo: "contato", nome: "Ana", contato: "ana@clinica.com", criadoEm: minutosAntes(10) }],
+      senhasProvisorias: [{ id: "p", nome: "vinicius" }],
+    });
+    expect(itens.map((i) => i.nivel)).toEqual(["alto", "alto", "medio", "medio"]);
+    expect(itens[0]).toMatchObject({ texto: "Ana pediu contato pelo site", detalhe: "ana@clinica.com · há 10 min" });
+    expect(itens[1]).toMatchObject({ texto: "Mandar proposta venceu em 25/10", detalhe: "com Gabriel" });
+    expect(itens[3].texto).toBe("Vinicius ainda usa a senha provisória");
+  });
+});
+
+describe("variação", () => {
+  it("compara com o período anterior e não inventa base", () => {
+    expect(variacao(112, 100)).toBe(12);
+    expect(variacao(80, 100)).toBe(-20);
+    expect(variacao(50, 0)).toBeNull();
   });
 });
