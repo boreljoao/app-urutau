@@ -33,7 +33,7 @@ Acessos de exemplo (senha `urutau123`):
 | `dono@urutau.dev` | Dono | Tudo; tem também uma segunda empresa (MEI) |
 | `colaborador@urutau.dev` | Colaborador | Lança vendas/despesas e vê só o que lançou |
 | `contador@urutau.dev` | Contador | Painel e lançamentos, somente leitura |
-| `admin@urutau.dev` | Equipe Urutau | Painel Urutau (`/admin`): todas as empresas, logins e módulos |
+| `ottaviano@urutau.dev`, `borel@`, `vinicius@`, `wanderley@` | Equipe Urutau | Central Urutau (`/admin`): a área de cada pessoa com metas, anotações e clientes; todas as empresas |
 
 Empresas de exemplo do `dono@`: **Padaria e Café Urutau** (Simples, Anexos I e III, com funcionários e dívidas),
 **Marina Doces** (MEI perto do limite anual), **Estúdio Urutau Design** (Simples Anexo V com Fator R, que passa
@@ -56,10 +56,14 @@ para o Anexo III depois de contratar) e **Urutau Manutenção Industrial** (Lucr
 
 `npm run db:reset` recusa apagar um banco que não seja local.
 
-5. **Equipe Urutau**: crie a conta em `/criar-conta` e rode `DATABASE_URL="<connection string>" npm run admin -- seu@email`.
-   Quem é equipe vê o painel `/admin` e entra em qualquer empresa com os poderes do dono (com um aviso no topo).
+5. **Equipe Urutau**: a primeira pessoa cria a conta em `/criar-conta` e roda `DATABASE_URL="<connection string>" npm run admin -- seu@email`.
+   As outras entram pela própria Central, em *Equipe → Pôr alguém na equipe* (a senha provisória aparece uma vez; a pessoa troca em
+   *Minha conta*). Quem é equipe vê a Central `/admin` e entra em qualquer empresa com os poderes do dono (com um aviso no topo).
 6. **Rotina diária**: crie a variável `CRON_SECRET` (valor longo e aleatório). A Vercel chama `/api/cron` todo dia às 6h
    (horário de Brasília; `vercel.json`).
+7. **Site urutau.io**: o site manda visitas, contatos e cliques no WhatsApp com `POST /api/site/evento`
+   (`{"tipo": "visita" | "contato" | "whatsapp", "pagina", "nome", "contato", "mensagem"}`). Só as origens de `SITE_ORIGENS`
+   são aceitas (padrão: `https://urutau.io,https://www.urutau.io`).
 
 **No celular**: abra o link e use *Compartilhar → Adicionar à Tela de Início* (iPhone/Safari) ou
 *⋮ → Instalar app* (Android/Chrome). O urutau abre em tela cheia, com ícone próprio.
@@ -158,4 +162,6 @@ tests/                 Vitest
 4. ✅ Relatórios (PDF/CSV/ZIP), despesas recorrentes, guias de impostos como contas a pagar, agenda de vencimentos e 13º/férias
 5. ✅ Base do ecossistema: painel Urutau, perfis e módulos (revenda de veículos primeiro), clientes, caixa de conferência,
    auditoria, fila de tarefas e rotina diária
-6. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp
+6. ✅ Central Urutau: a área de cada pessoa da equipe (metas do mês com ritmo, clientes sob responsabilidade, anotações),
+   quem está online e em qual tela, o que aconteceu na equipe e nos clientes, e os sinais do site urutau.io
+7. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp

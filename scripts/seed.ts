@@ -6,7 +6,7 @@
  *
  * Acessos (senha de todos: urutau123):
  *   dono@urutau.dev · colaborador@urutau.dev · contador@urutau.dev
- *   admin@urutau.dev (equipe Urutau: vê o painel com todas as empresas)
+ *   ottaviano@, borel@, vinicius@ e wanderley@urutau.dev (equipe Urutau: a Central com todas as empresas)
  *
  * Fase 5: "Urutau Veículos", revenda de carros com clientes e vendas que chegaram
  * pelo WhatsApp esperando conferência (scripts/seed-revenda.ts).
@@ -38,6 +38,7 @@ import { type Data, diasNoMes, hoje, mesAtual, mesDe, somarDias, somarMeses, ult
 import { impostoDoMes } from "../src/lib/servidor/fiscal";
 import { sincronizarFolha } from "../src/lib/servidor/folha";
 import { prepararEmpresa } from "../src/lib/servidor/automaticos";
+import { semearCentral } from "./seed-central";
 import { semearRevenda } from "./seed-revenda";
 
 const url = process.argv[2] ?? process.env.DATABASE_URL!;
@@ -484,6 +485,10 @@ for (const e of await db.select().from(empresas)) {
 }
 console.log("Fase 4: despesas recorrentes, guias de impostos e férias registradas.");
 
+// ── Fase 6: Central Urutau (equipe, metas, anotações, site) ──────────────────
+await semearCentral(db, { senhaHash, admin });
+console.log("Fase 6: equipe Urutau com metas e anotações.");
+
 await cliente.end();
 console.log(`\nPronto! Entre com dono@urutau.dev / ${process.env.SEED_SENHA ? "(a senha de SEED_SENHA)" : "urutau123"} (também colaborador@ e contador@).`);
-console.log("Painel Urutau (todas as empresas): admin@urutau.dev, mesma senha.");
+console.log("Central Urutau (equipe): ottaviano@urutau.dev, borel@, vinicius@ e wanderley@, mesma senha.");

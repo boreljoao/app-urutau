@@ -18,8 +18,8 @@ export default async function EmpresaAdmin({ params }: { params: Promise<{ id: s
   if (!dados) notFound();
   const { empresa, membros, modulos, eventos } = dados;
   return (
-    <div className="space-y-6">
-      <Cabecalho titulo={empresa.nome} voltar="/admin" />
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Cabecalho titulo={empresa.nome} voltar="/admin/empresas" />
       <section className="cartao space-y-3">
         <p className="text-sm text-suave">
           {PERFIS[empresa.perfil].nome} · {[empresa.cidade, empresa.uf].filter(Boolean).join("/") || "sem cidade"} · cliente desde{" "}

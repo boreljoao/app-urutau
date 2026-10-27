@@ -126,3 +126,69 @@ body {
   @apply rounded-xl border bg-superficie p-3 text-sm;
   border-color: color-mix(in srgb, var(--destaque) 55%, transparent);
 }
+
+/*
+ * Central Urutau (o painel da equipe): sempre noite, como o urutau. Fundo quase preto com a
+ * temperatura do azul da marca; elevação só por um degrau de luz, sem bordas nem sombras;
+ * o amarelo vai só nos números e nas barras, nunca em botões ou na navegação.
+ */
+.central {
+  --fundo: #0b0f1d;
+  --superficie: #121830;
+  --superficie-2: #1a213d;
+  --borda: #262e4f;
+  --texto: #eceae4;
+  --texto-suave: #a7abbd;
+  --texto-meta: #8c91a6;
+  --destaque: #f5c518;
+  --destaque-texto: #f5c518;
+  --sobre-destaque: #0b0f1d;
+  --positivo: #6ee7a8;
+  --negativo: #ff8a80;
+  --negativo-fundo: rgba(255, 138, 128, 0.12);
+  --aviso-fundo: rgba(245, 197, 24, 0.08);
+  color-scheme: dark;
+  background: var(--fundo);
+  color: var(--texto);
+  font-size: 14px;
+}
+.central .cartao {
+  @apply rounded-xl border-0 p-5;
+}
+/* Ação principal por inversão: claro sobre a noite, nunca amarelo. */
+.central .btn-principal,
+.btn-central {
+  @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-texto px-4 py-1.5 text-sm font-bold text-fundo active:scale-[.98] disabled:opacity-60;
+  font-family: var(--font-sans);
+}
+.btn-leve {
+  @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-full bg-superficie-2 px-4 py-1.5 text-sm font-medium text-texto hover:brightness-125 active:scale-[.98] disabled:opacity-60;
+}
+.central .campo {
+  @apply rounded-lg border-0 bg-superficie-2 px-3 py-2 text-sm;
+  min-height: 40px;
+}
+.central .rotulo {
+  @apply mb-1 text-[13px];
+}
+.text-meta {
+  color: var(--texto-meta);
+}
+.central dialog::backdrop {
+  background: rgba(5, 7, 15, 0.7);
+}
+
+@keyframes central-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+.entrada {
+  animation: central-entrada 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .entrada {
+    animation: none;
+  }
+}

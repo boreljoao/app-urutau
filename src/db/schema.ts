@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   check,
@@ -89,6 +90,8 @@ export const origemVendaEnum = pgEnum("origem_venda", ["manual", "whatsapp", "ag
 export const origemClienteEnum = pgEnum("origem_cliente", ["manual", "whatsapp", "site", "balcao", "indicacao"]);
 export const atorEnum = pgEnum("ator", ["usuario", "admin", "agente", "sistema"]);
 export const statusTarefaEnum = pgEnum("status_tarefa", ["pendente", "executando", "concluida", "falhou"]);
+export const tipoMetaEnum = pgEnum("tipo_meta", ["valor", "quantidade"]);
+export const tipoEventoSiteEnum = pgEnum("tipo_evento_site", ["visita", "contato", "whatsapp"]);
 
 // ─── Acesso ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +101,12 @@ export const usuarios = pgTable("usuarios", {
   email: text("email").notNull().unique(),
   senhaHash: text("senha_hash").notNull(),
   superadmin: boolean("superadmin").notNull().default(false),
+  /** A senha foi gerada pelo painel Urutau: a pessoa ainda precisa trocar. */
+  senhaProvisoria: boolean("senha_provisoria").notNull().default(false),
+  /** Último sinal de vida de uma aba aberta (POST /api/presenca, a cada minuto). */
+  vistoEm: timestamp("visto_em", { withTimezone: true }),
+  /** Caminho da tela onde a pessoa estava no último sinal. */
+  ondeEsta: text("onde_esta"),
   criadoEm: criadoEm(),
   atualizadoEm: atualizadoEm(),
 });
@@ -137,6 +146,8 @@ export const empresas = pgTable(
       .notNull()
       .default("despesa_na_compra"),
     perfil: perfilEnum("perfil").notNull().default("financas"),
+    /** Quem da equipe Urutau cuida deste cliente. */
+    responsavelId: uuid("responsavel_id").references((): AnyPgColumn => usuarios.id, { onDelete: "set null" }),
     criadoEm: criadoEm(),
     atualizadoEm: atualizadoEm(),
   },
@@ -690,6 +701,65 @@ export const tarefas = pgTable(
   (t) => [index("tarefas_fila_idx").on(t.status, t.executarEm)],
 );
 
+// ─── Central da equipe Urutau ────────────────────────────────────────────────
+
+/** Meta do mês de uma pessoa da equipe. "valor" em centavos; "quantidade" em unidades. */
+export const metas = pgTable(
+  "metas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "cascade" }),
+    /** Primeiro dia do mês da meta. */
+    mes: date("mes").notNull(),
+    titulo: text("titulo").notNull(),
+    tipo: tipoMetaEnum("tipo").notNull(),
+    alvo: bigint("alvo", { mode: "number" }).notNull(),
+    atual: bigint("atual", { mode: "number" }).notNull().default(0),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+  (t) => [
+    index("metas_usuario_mes_idx").on(t.usuarioId, t.mes),
+    check("metas_alvo_positivo", sql`${t.alvo} > 0`),
+    check("metas_atual_nao_negativo", sql`${t.atual} >= 0`),
+    check("metas_mes_dia_1", sql`extract(day from ${t.mes}) = 1`),
+  ],
+);
+
+/** Anotações da equipe. `sobreUsuarioId` põe a nota na área de alguém; `empresaId`, num cliente. */
+export const notasEquipe = pgTable(
+  "notas_equipe",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    autorId: uuid("autor_id").references(() => usuarios.id, { onDelete: "set null" }),
+    sobreUsuarioId: uuid("sobre_usuario_id").references(() => usuarios.id, { onDelete: "set null" }),
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+    texto: text("texto").notNull(),
+    fixada: boolean("fixada").notNull().default(false),
+    criadoEm: criadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [index("notas_equipe_criado_idx").on(t.criadoEm)],
+);
+
+/** O que o site urutau.io manda (POST /api/site/evento): visitas, contatos, cliques no WhatsApp. */
+export const eventosSite = pgTable(
+  "eventos_site",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tipo: tipoEventoSiteEnum("tipo").notNull(),
+    pagina: text("pagina"),
+    nome: text("nome"),
+    contato: text("contato"),
+    mensagem: text("mensagem"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("eventos_site_criado_idx").on(t.criadoEm)],
+);
+
 export type TipoDivida =(typeof tipoDividaEnum.enumValues)[number];
 export type Papel = (typeof papelEnum.enumValues)[number];
 export type Regime = (typeof regimeEnum.enumValues)[number];
@@ -700,3 +770,4 @@ export type Empresa = typeof empresas.$inferSelect;
 export type Perfil = (typeof perfilEnum.enumValues)[number];
 export type Modulo = (typeof moduloEnum.enumValues)[number];
 export type OrigemVenda = (typeof origemVendaEnum.enumValues)[number];
+export type TipoMeta = (typeof tipoMetaEnum.enumValues)[number];

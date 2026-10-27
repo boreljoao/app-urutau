@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NavInferior } from "@/components/NavInferior";
+import { Presenca } from "@/components/Presenca";
 import { NOME_PAPEL, pode } from "@/lib/permissoes";
 import { obterDb } from "@/db";
 import { exigirAcesso } from "@/lib/servidor/acesso";
@@ -41,6 +42,7 @@ export default async function LayoutEmpresa({
         <p className="border-b border-borda bg-superficie px-4 py-2 text-center text-sm text-suave">Acesso de contador: somente leitura.</p>
       )}
       <main className="mx-auto max-w-2xl px-4 py-5">{children}</main>
+      <Presenca />
       <NavInferior base={base} verPainel={pode(papel, "ver_painel")} lancar={pode(papel, "lancar")} />
     </div>
   );

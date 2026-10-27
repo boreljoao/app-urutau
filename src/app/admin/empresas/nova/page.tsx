@@ -6,9 +6,9 @@ export const metadata = { title: "Nova empresa" };
 
 export default function NovaEmpresaAdmin() {
   return (
-    <>
-      <Cabecalho titulo="Nova empresa" voltar="/admin" />
+    <div className="mx-auto max-w-3xl">
+      <Cabecalho titulo="Nova empresa" voltar="/admin/empresas" />
       <FormEmpresa acao={criarEmpresaAdmin} textoBotao="Criar empresa" comDono />
-    </>
+    </div>
   );
 }

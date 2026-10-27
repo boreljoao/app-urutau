@@ -8,7 +8,8 @@ import { cache } from "react";
 import { obterDb } from "@/db";
 import { sessoes, usuarios } from "@/db/schema";
 
-const COOKIE = "urutau_sessao";
+export const NOME_COOKIE = "urutau_sessao";
+const COOKIE = NOME_COOKIE;
 const DURACAO_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const hashSenha = (senha: string) => hash(senha);
@@ -20,7 +21,7 @@ export function gerarSenhaProvisoria(tamanho = 10) {
   return Array.from({ length: tamanho }, () => alfabeto[randomInt(alfabeto.length)]).join("");
 }
 
-const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
+export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
 export async function iniciarSessao(usuarioId: string) {
   const token = randomBytes(32).toString("base64url");
@@ -42,13 +43,13 @@ export async function encerrarSessao() {
   jar.delete(COOKIE);
 }
 
-export type UsuarioAtual = { id: string; nome: string; email: string; superadmin: boolean };
+export type UsuarioAtual = { id: string; nome: string; email: string; superadmin: boolean; senhaProvisoria: boolean };
 
 export const obterUsuarioAtual = cache(async (): Promise<UsuarioAtual | null> => {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   const [linha] = await obterDb()
-    .select({ id: usuarios.id, nome: usuarios.nome, email: usuarios.email, superadmin: usuarios.superadmin })
+    .select({ id: usuarios.id, nome: usuarios.nome, email: usuarios.email, superadmin: usuarios.superadmin, senhaProvisoria: usuarios.senhaProvisoria })
     .from(sessoes)
     .innerJoin(usuarios, eq(usuarios.id, sessoes.usuarioId))
     .where(and(eq(sessoes.tokenHash, hashToken(token)), gt(sessoes.expiraEm, new Date())))

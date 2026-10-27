@@ -25,7 +25,7 @@ export async function entrar(_: EstadoForm, fd: FormData): Promise<EstadoForm> {
     return { erros: { _: "E-mail ou senha incorretos." }, valores: { email } };
   }
   await iniciarSessao(u.id);
-  redirect("/empresas");
+  redirect(u.superadmin ? "/admin" : "/empresas");
 }
 
 export async function criarConta(_: EstadoForm, fd: FormData): Promise<EstadoForm> {
