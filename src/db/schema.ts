@@ -1235,3 +1235,112 @@ export const mensagensWhatsapp = pgTable(
 
 export type ModoAgente = (typeof modoAgenteEnum.enumValues)[number];
 export type StatusConversa = (typeof statusConversaEnum.enumValues)[number];
+
+// ─── Estoque e caixa (PDV) ───────────────────────────────────────────────────
+
+export const unidadeProdutoEnum = pgEnum("unidade_produto", ["un", "kg", "g", "l", "ml", "m", "cx", "pct"]);
+/** Cada mudança de saldo tem um movimento: o saldo do produto é sempre a soma deles. */
+export const tipoMovimentoEnum = pgEnum("tipo_movimento", ["entrada", "venda", "devolucao", "ajuste", "perda", "cancelamento"]);
+
+/**
+ * Produto da loja. Quantidades em milésimos da unidade (1 un = 1000; 1,250 kg = 1250), para
+ * vender a granel sem ponto flutuante. Custo médio ponderado, em centavos por unidade.
+ */
+export const produtos = pgTable(
+  "produtos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    nome: text("nome").notNull(),
+    sku: text("sku"),
+    /** EAN/GTIN da embalagem, ou código próprio impresso na etiqueta. */
+    codigoBarras: text("codigo_barras"),
+    categoria: text("categoria").notNull().default(""),
+    unidade: unidadeProdutoEnum("unidade").notNull().default("un"),
+    precoCentavos: centavos("preco_centavos").notNull().default(0),
+    custoMedioCentavos: centavos("custo_medio_centavos").notNull().default(0),
+    saldoMil: bigint("saldo_mil", { mode: "number" }).notNull().default(0),
+    minimoMil: bigint("minimo_mil", { mode: "number" }).notNull().default(0),
+    /** Serviços e itens feitos na hora (um café coado) vendem sem baixar estoque. */
+    controlaEstoque: boolean("controla_estoque").notNull().default(true),
+    ativo: boolean("ativo").notNull().default(true),
+    ultimaVendaEm: timestamp("ultima_venda_em", { withTimezone: true }),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [
+    unique("produtos_empresa_id_uq").on(t.empresaId, t.id),
+    uniqueIndex("produtos_codigo_uq").on(t.empresaId, t.codigoBarras).where(sql`${t.codigoBarras} is not null and ${t.excluidoEm} is null`),
+    uniqueIndex("produtos_sku_uq").on(t.empresaId, t.sku).where(sql`${t.sku} is not null and ${t.excluidoEm} is null`),
+    index("produtos_empresa_nome_idx").on(t.empresaId, t.nome),
+    check("produtos_preco", sql`${t.precoCentavos} >= 0 and ${t.custoMedioCentavos} >= 0 and ${t.minimoMil} >= 0`),
+  ],
+);
+
+export const movimentosEstoque = pgTable(
+  "movimentos_estoque",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id").notNull(),
+    tipo: tipoMovimentoEnum("tipo").notNull(),
+    /** Com sinal: entrada e devolução somam; venda e perda subtraem; ajuste vai para os dois lados. */
+    quantidadeMil: bigint("quantidade_mil", { mode: "number" }).notNull(),
+    /** Na entrada: quanto custou cada unidade nesta compra. */
+    custoUnitarioCentavos: centavos("custo_unitario_centavos"),
+    saldoAposMil: bigint("saldo_apos_mil", { mode: "number" }).notNull(),
+    custoMedioAposCentavos: centavos("custo_medio_apos_centavos").notNull(),
+    vendaId: uuid("venda_id").references(() => vendas.id, { onDelete: "set null" }),
+    /** Entrada de mercadoria: a mesma compra (várias linhas) e a despesa dela no financeiro (despesas.compra_id). */
+    compraId: uuid("compra_id"),
+    /** Nota fiscal, pedido do fornecedor… */
+    documento: text("documento"),
+    observacao: text("observacao").notNull().default(""),
+    usuarioId: uuid("usuario_id").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+  },
+  (t) => [
+    foreignKey({ name: "movimentos_produto_fk", columns: [t.empresaId, t.produtoId], foreignColumns: [produtos.empresaId, produtos.id] }).onDelete("cascade"),
+    index("movimentos_produto_idx").on(t.empresaId, t.produtoId, t.criadoEm),
+    index("movimentos_empresa_idx").on(t.empresaId, t.criadoEm),
+    index("movimentos_compra_idx").on(t.empresaId, t.compraId),
+    check("movimentos_quantidade", sql`${t.quantidadeMil} <> 0 or ${t.tipo} = 'ajuste'`),
+  ],
+);
+
+/** Itens de uma venda feita no caixa: guardam preço e custo do momento, para margem e devolução. */
+export const vendaItens = pgTable(
+  "venda_itens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    vendaId: uuid("venda_id")
+      .notNull()
+      .references(() => vendas.id, { onDelete: "cascade" }),
+    produtoId: uuid("produto_id"),
+    descricao: text("descricao").notNull(),
+    quantidadeMil: bigint("quantidade_mil", { mode: "number" }).notNull(),
+    precoUnitarioCentavos: centavos("preco_unitario_centavos").notNull(),
+    descontoCentavos: centavos("desconto_centavos").notNull().default(0),
+    totalCentavos: centavos("total_centavos").notNull(),
+    custoUnitarioCentavos: centavos("custo_unitario_centavos").notNull().default(0),
+  },
+  (t) => [
+    foreignKey({ name: "venda_itens_produto_fk", columns: [t.empresaId, t.produtoId], foreignColumns: [produtos.empresaId, produtos.id] }),
+    index("venda_itens_venda_idx").on(t.vendaId),
+    index("venda_itens_produto_idx").on(t.empresaId, t.produtoId),
+    check("venda_itens_valores", sql`${t.quantidadeMil} > 0 and ${t.totalCentavos} >= 0 and ${t.descontoCentavos} >= 0`),
+  ],
+);
+
+export type Unidade = (typeof unidadeProdutoEnum.enumValues)[number];
+export type TipoMovimento = (typeof tipoMovimentoEnum.enumValues)[number];
+export type Produto = typeof produtos.$inferSelect;

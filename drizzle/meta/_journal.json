@@ -99,6 +99,13 @@
       "when": 1793121058236,
       "tag": "0013_fase9_whatsapp",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793126935606,
+      "tag": "0014_fase10_estoque",
+      "breakpoints": true
     }
   ]
 }

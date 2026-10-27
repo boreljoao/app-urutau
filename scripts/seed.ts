@@ -40,6 +40,7 @@ import { sincronizarFolha } from "../src/lib/servidor/folha";
 import { prepararEmpresa } from "../src/lib/servidor/automaticos";
 import { semearAtendimento } from "./seed-atendimento";
 import { semearCentral } from "./seed-central";
+import { semearEstoque } from "./seed-estoque";
 import { semearComercial } from "./seed-comercial";
 import { semearReceita } from "./seed-receita";
 import { semearRevenda } from "./seed-revenda";
@@ -493,6 +494,8 @@ const equipe = await semearCentral(db, { senhaHash, admin });
 await semearComercial(db, equipe);
 await semearReceita(db, equipe, senhaHash);
 await semearAtendimento(db, { revendaId: loja.id, padariaId });
+const estoque = await semearEstoque(db, { padariaId, donoId: dono.id });
+console.log(`Estoque: ${estoque.produtos} produtos e ${estoque.vendas} vendas no caixa da padaria.`);
 console.log("Fase 6: equipe Urutau com metas e anotações.");
 
 await cliente.end();
