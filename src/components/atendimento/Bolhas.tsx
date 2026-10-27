@@ -14,7 +14,7 @@ export interface MensagemNaTela {
 const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 const dia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long" });
 
-const ICONE_ACAO: Record<string, string> = { anotar_atendimento: "✎", salvar_cliente: "☺", registrar_venda: "$", chamar_humano: "☎" };
+const ICONE_ACAO: Record<string, string> = { anotar_atendimento: "✎", salvar_cliente: "☺", registrar_venda: "$", chamar_humano: "☎", salvar_contato: "☺", chamar_equipe: "☎" };
 
 function Tique({ status }: { status: string }) {
   if (status === "falhou") return <span className="font-bold text-negativo" title="Não foi entregue">!</span>;
@@ -29,7 +29,8 @@ export function segundos(ms: number | null | undefined) {
   return ms < 60_000 ? `${Math.max(1, Math.round(ms / 1000))} s` : `${Math.round(ms / 60_000)} min`;
 }
 
-export function Bolhas({ mensagens, ocultarRascunhos = true }: { mensagens: MensagemNaTela[]; ocultarRascunhos?: boolean }) {
+/** `equipe` é como as respostas de pessoas aparecem: "Equipe da loja" no WhatsApp, "Equipe Urutau" no chat do site. */
+export function Bolhas({ mensagens, ocultarRascunhos = true, equipe = "Equipe da loja" }: { mensagens: MensagemNaTela[]; ocultarRascunhos?: boolean; equipe?: string }) {
   let ultimoDia = "";
   return (
     <ol className="space-y-1.5" aria-label="Mensagens">
@@ -45,7 +46,7 @@ export function Bolhas({ mensagens, ocultarRascunhos = true }: { mensagens: Mens
               {m.autor === "sistema" ? (
                 <p className="mx-auto my-2 w-fit max-w-[85%] rounded-full bg-superficie px-3 py-1 text-center text-xs text-suave">{m.texto}</p>
               ) : (
-                <Bolha m={m} />
+                <Bolha m={m} equipe={equipe} />
               )}
             </li>
           );
@@ -54,7 +55,7 @@ export function Bolhas({ mensagens, ocultarRascunhos = true }: { mensagens: Mens
   );
 }
 
-function Bolha({ m }: { m: MensagemNaTela }) {
+function Bolha({ m, equipe }: { m: MensagemNaTela; equipe: string }) {
   const daLoja = m.autor !== "cliente";
   return (
     <div className={`flex flex-col ${daLoja ? "items-end" : "items-start"}`}>
@@ -63,7 +64,7 @@ function Bolha({ m }: { m: MensagemNaTela }) {
           daLoja ? `rounded-br-md ${m.autor === "humano" ? "border border-destaque/60 bg-superficie" : "bg-superficie-2"}` : "rounded-bl-md border border-borda bg-superficie"
         } ${m.status === "falhou" ? "!border-negativo" : ""}`}
       >
-        {daLoja && <span className="mb-0.5 block text-[11px] font-semibold text-suave">{m.autor === "agente" ? "Agente" : "Equipe da loja"}</span>}
+        {daLoja && <span className="mb-0.5 block text-[11px] font-semibold text-suave">{m.autor === "agente" ? "Agente" : equipe}</span>}
         <p className="whitespace-pre-wrap break-words">{m.texto}</p>
         <span className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-suave">
           {m.autor === "agente" && segundos(m.tempoRespostaMs) && <span title="Tempo até responder">{segundos(m.tempoRespostaMs)} ·</span>}

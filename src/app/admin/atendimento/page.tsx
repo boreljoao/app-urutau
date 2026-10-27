@@ -11,6 +11,7 @@ import { formatarReais } from "@/lib/dinheiro";
 import { PERFIS } from "@/lib/perfis";
 import { criarAgenteCentralAcao, mudarModoCentralAcao } from "@/lib/servidor/acoes-atendimento";
 import { lojasSemAgente, movimentoRecente, painelAtendimento } from "@/lib/servidor/atendimento";
+import { resumoDoChat } from "@/lib/servidor/chat-site";
 import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { formatarTelefone } from "@/lib/validacao";
 
@@ -47,7 +48,7 @@ export default async function CentralAtendimento() {
   await exigirSuperadmin();
   const db = obterDb();
   const agora = new Date();
-  const [lojas, feed, semAgente] = await Promise.all([painelAtendimento(db, agora), movimentoRecente(db, 30), lojasSemAgente(db)]);
+  const [lojas, feed, semAgente, chat] = await Promise.all([painelAtendimento(db, agora), movimentoRecente(db, 30), lojasSemAgente(db), resumoDoChat(db, agora)]);
   const comEstado = lojas.map((l) => ({ ...l, estado: estadoDoAgente(l, agora) }));
   const ordem: EstadoAgente[] = ["erro", "no_ar", "aprovacao", "simulador", "pausado", "sem_agente"];
   comEstado.sort((a, b) => ordem.indexOf(a.estado) - ordem.indexOf(b.estado) || b.conversas7d - a.conversas7d);
@@ -91,6 +92,39 @@ export default async function CentralAtendimento() {
           <Numero rotulo="Vendas pelo WhatsApp" valor={formatarReais(soma("vendas30dCentavos"))} linha={`${soma("vendas30d")} vendas em 30 dias`} destaque={soma("vendas30d") > 0} />
           <Numero rotulo="Custo em 30 dias" valor={reais(custo30)} linha={`IA + mensagens da Meta · US$ ${custo30.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
         </dl>
+      </section>
+
+      <section className="cartao entrada flex flex-wrap items-center gap-x-6 gap-y-3" aria-labelledby="t-chat-site">
+        <div className="min-w-0 flex-1">
+          <h2 id="t-chat-site" className="font-titulo text-[16px] font-bold">
+            Chat do site urutau.io
+          </h2>
+          <p className="text-[13px] text-suave">
+            O agente da própria Urutau, 24h.{" "}
+            {chat.falhas7d > 0 ? <span className="text-negativo">Falhou {chat.falhas7d}× nesta semana.</span> : "Sem falhas nesta semana."}
+          </p>
+        </div>
+        <dl className="flex flex-wrap gap-x-6 gap-y-2">
+          <div>
+            <dt className="text-[11px] text-meta">Hoje</dt>
+            <dd className="numero text-[18px] font-bold">{chat.hoje}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-meta">Esperam a equipe</dt>
+            <dd className={`numero text-[18px] font-bold ${chat.esperandoEquipe ? "text-negativo" : ""}`}>{chat.esperandoEquipe}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-meta">Contatos (30 dias)</dt>
+            <dd className="numero text-[18px] font-bold">{chat.contatos30d}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-meta">Custo (30 dias)</dt>
+            <dd className="numero text-[18px] font-bold">{reais(chat.custo30dMicros / 1e6)}</dd>
+          </div>
+        </dl>
+        <Link href="/admin/comercial/chat" className="btn-secundario !min-h-10 text-sm">
+          Ver conversas
+        </Link>
       </section>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

@@ -186,6 +186,8 @@ export interface EntradaAtencao {
   senhasProvisorias: { id: string; nome: string }[];
   /** Leads com retorno marcado para antes de hoje. */
   retornosAtrasados?: { id: string; nome: string; proximoContato: string; responsavel: string | null }[];
+  /** Conversas do chat do site em que o agente chamou a equipe. */
+  chatEsperando?: { id: string; nome: string | null; motivo: string | null; desde: Date }[];
 }
 
 export interface ItemAtencao {
@@ -203,7 +205,7 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 /**
  * A fila do que a equipe precisa resolver, montada sozinha a partir dos dados:
  * vendas paradas sem conferência, clientes que sumiram do app, tarefas vencidas,
- * contatos do site e contas com senha provisória. O que é urgente vem primeiro.
+ * contatos e conversas do site e contas com senha provisória. O que é urgente vem primeiro.
  */
 export function montarAtencao(e: EntradaAtencao): ItemAtencao[] {
   const itens: ItemAtencao[] = [];
@@ -215,6 +217,15 @@ export function montarAtencao(e: EntradaAtencao): ItemAtencao[] {
       texto: c.tipo === "whatsapp" ? `${quem} clicou no WhatsApp do site` : `${quem} pediu contato pelo site`,
       detalhe: [c.contato, quando(c.criadoEm, e.agora)].filter(Boolean).join(" · "),
       link: "/admin#site",
+    });
+  }
+  for (const c of e.chatEsperando ?? []) {
+    itens.push({
+      chave: `chat-${c.id}`,
+      nivel: "alto",
+      texto: `${c.nome ?? "Um visitante"} espera a equipe no chat do site`,
+      detalhe: [c.motivo, quando(c.desde, e.agora)].filter(Boolean).join(" · "),
+      link: `/admin/comercial/chat/${c.id}`,
     });
   }
   for (const a of e.afazeresAtrasados) {

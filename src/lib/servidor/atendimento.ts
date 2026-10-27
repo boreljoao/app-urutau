@@ -49,7 +49,8 @@ export interface Dependencias {
 
 let clienteClaude: Anthropic | null = null;
 
-const criarPadrao: CriarMensagem = (p) => {
+/** Chama o Claude de verdade (o chat do site usa o mesmo cliente). */
+export const criarPadrao: CriarMensagem = (p) => {
   if (!process.env.ANTHROPIC_API_KEY) throw new ErroAtendimento("A IA ainda não foi ligada neste ambiente (falta a ANTHROPIC_API_KEY). Avise a equipe Urutau.");
   clienteClaude ??= new Anthropic({ maxRetries: 2, timeout: 60_000 });
   return clienteClaude.beta.messages.create(p);

@@ -1,0 +1,52 @@
+import { describe, expect, it } from "vitest";
+import { FRENTES_CHAT, PROMPT_DO_SITE, chaveDeChatValida, equipeNoHorario, limiteDiarioDoChat } from "@/lib/chat-site";
+import { montarAtencao } from "@/lib/central";
+import { NOME_SERVICO } from "@/lib/comercial";
+
+describe("chat do site", () => {
+  it("aceita só chaves aleatórias de tamanho razoável", () => {
+    expect(chaveDeChatValida("3f2b8c1e-9d4a-4b7e-8f60-2a1c5e7d9b30")).toBe(true);
+    expect(chaveDeChatValida("lq2x9k-a8f3k2m1p0")).toBe(false); // curta demais
+    expect(chaveDeChatValida("abc def ghi jkl mno pqr")).toBe(false);
+    expect(chaveDeChatValida("x".repeat(65))).toBe(false);
+    expect(chaveDeChatValida(undefined)).toBe(false);
+  });
+
+  it("sabe quando a equipe está no horário (Brasília)", () => {
+    expect(equipeNoHorario(new Date("2026-10-27T13:00:00Z"))).toBe(true); // terça, 10h
+    expect(equipeNoHorario(new Date("2026-10-27T22:30:00Z"))).toBe(false); // terça, 19h30
+    expect(equipeNoHorario(new Date("2026-10-28T02:00:00Z"))).toBe(false); // terça, 23h
+    expect(equipeNoHorario(new Date("2026-10-27T10:59:00Z"))).toBe(false); // terça, 7h59
+    expect(equipeNoHorario(new Date("2026-10-31T14:00:00Z"))).toBe(false); // sábado
+    expect(equipeNoHorario(new Date("2026-11-01T14:00:00Z"))).toBe(false); // domingo
+  });
+
+  it("o teto diário vem da variável, com 600 como padrão", () => {
+    expect(limiteDiarioDoChat({})).toBe(600);
+    expect(limiteDiarioDoChat({ SITE_CHAT_LIMITE_DIA: "150" })).toBe(150);
+    expect(limiteDiarioDoChat({ SITE_CHAT_LIMITE_DIA: "abc" })).toBe(600);
+    expect(limiteDiarioDoChat({ SITE_CHAT_LIMITE_DIA: "0" })).toBe(600);
+  });
+
+  it("o prompt fala das seis frentes, do contato real e proíbe inventar preço", () => {
+    for (const f of FRENTES_CHAT) expect(PROMPT_DO_SITE).toContain(`${NOME_SERVICO[f]}:`);
+    expect(PROMPT_DO_SITE).toContain("(21) 99368-9481");
+    expect(PROMPT_DO_SITE).toMatch(/Nunca invente preço/);
+  });
+
+  it("conversa que espera a equipe entra na fila da Central", () => {
+    const agora = new Date("2026-10-27T13:00:00Z");
+    const itens = montarAtencao({
+      agora,
+      hoje: "2026-10-27",
+      empresas: [],
+      afazeresAtrasados: [],
+      contatosSite: [],
+      senhasProvisorias: [],
+      chatEsperando: [{ id: "c1", nome: "Marina", motivo: "Quer fechar hoje", desde: new Date("2026-10-27T12:50:00Z") }],
+    });
+    expect(itens).toEqual([
+      { chave: "chat-c1", nivel: "alto", texto: "Marina espera a equipe no chat do site", detalhe: "Quer fechar hoje · há 10 min", link: "/admin/comercial/chat/c1" },
+    ]);
+  });
+});

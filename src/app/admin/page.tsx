@@ -26,6 +26,7 @@ import {
   pessoasOnlineNasEmpresas,
   resumoDoSite,
 } from "@/lib/servidor/central";
+import { listarConversasDoSite } from "@/lib/servidor/chat-site";
 import { proximosContatos } from "@/lib/servidor/comercial";
 
 export const metadata = { title: "Visão geral" };
@@ -43,7 +44,7 @@ export default async function VisaoGeral() {
   const fracao = fracaoDoMes(mes, diaDeHoje);
   const nomeMes = nomeDoMes(mes).split(" ")[0];
   const nomeMesAnterior = nomeDoMes(somarMeses(mes, -1)).split(" ")[0];
-  const [equipe, metas, empresas, notas, atividade, onlineNosClientes, site, movimento, abertas, feitas7, contatos, retornos] = await Promise.all([
+  const [equipe, metas, empresas, notas, atividade, onlineNosClientes, site, movimento, abertas, feitas7, contatos, retornos, chat] = await Promise.all([
     listarEquipe(db),
     metasDoMes(db, mes),
     empresasDaCentral(db, mes, undefined, hojeData),
@@ -56,6 +57,7 @@ export default async function VisaoGeral() {
     afazeresFeitosDesde(db, 7, agora),
     contatosRecentesDoSite(db, 48, agora),
     proximosContatos(db, somarDias(hojeData, -1), 20),
+    listarConversasDoSite(db, "equipe", 20),
   ]);
   const nomeDaEmpresa = (id: string) => empresas.find((e) => e.id === id)?.nome;
   const posicao = new Map(equipe.map((p, i) => [p.id, i]));
@@ -71,6 +73,7 @@ export default async function VisaoGeral() {
     contatosSite: contatos,
     senhasProvisorias: equipe.filter((p) => p.senhaProvisoria),
     retornosAtrasados: retornos.map((r) => ({ id: r.id, nome: r.nome, proximoContato: r.proximoContato!, responsavel: r.responsavel })),
+    chatEsperando: chat.map((c) => ({ id: c.id, nome: c.nome, motivo: c.motivoHumano, desde: c.ultimaMensagemEm })),
   });
 
   const online = equipe.filter((p) => presenca(p.vistoEm, agora).estado === "online");

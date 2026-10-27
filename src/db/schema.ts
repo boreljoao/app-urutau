@@ -1235,3 +1235,57 @@ export const mensagensWhatsapp = pgTable(
 
 export type ModoAgente = (typeof modoAgenteEnum.enumValues)[number];
 export type StatusConversa = (typeof statusConversaEnum.enumValues)[number];
+
+// ─── Chat do site urutau.io ──────────────────────────────────────────────────
+
+/**
+ * Conversa de um visitante com o agente da própria Urutau no chat do site, a qualquer hora.
+ * `chave` é um segredo aleatório que fica no navegador do visitante: só quem tem a chave lê e
+ * continua a conversa. Quando o visitante deixa contato, a conversa ganha um lead no Comercial.
+ */
+export const conversasSite = pgTable(
+  "conversas_site",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chave: text("chave").notNull().unique(),
+    /** Código anônimo do navegador (o mesmo da aba Site), quando a pessoa não recusou. */
+    visitanteId: text("visitante_id"),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    nome: text("nome"),
+    /** WhatsApp ou e-mail que o visitante deixou. */
+    contato: text("contato"),
+    status: statusConversaEnum("status").notNull().default("agente"),
+    /** Frentes que interessam: atende, flow, financas, gestao, sites, ads. */
+    interesses: text("interesses").array().notNull().default(sql`'{}'::text[]`),
+    resumo: text("resumo"),
+    motivoHumano: text("motivo_humano"),
+    /** Onde o chat foi aberto pela primeira vez. */
+    pagina: text("pagina"),
+    naoLidas: integer("nao_lidas").notNull().default(0),
+    ultimaMensagemEm: timestamp("ultima_mensagem_em", { withTimezone: true }).notNull().defaultNow(),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("conversas_site_recentes_idx").on(t.ultimaMensagemEm)],
+);
+
+export const mensagensSite = pgTable(
+  "mensagens_site",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversaId: uuid("conversa_id")
+      .notNull()
+      .references(() => conversasSite.id, { onDelete: "cascade" }),
+    autor: autorMensagemEnum("autor").notNull(),
+    texto: text("texto").notNull(),
+    usuarioId: uuid("usuario_id").references(() => usuarios.id, { onDelete: "set null" }),
+    acoes: jsonb("acoes").$type<{ nome: string; resumo: string }[]>(),
+    tokensEntrada: integer("tokens_entrada"),
+    tokensSaida: integer("tokens_saida"),
+    tokensCache: integer("tokens_cache"),
+    /** Custo estimado da IA em milionésimos de dólar. */
+    custoMicrosUsd: integer("custo_micros_usd"),
+    tempoRespostaMs: integer("tempo_resposta_ms"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("mensagens_site_conversa_idx").on(t.conversaId, t.criadoEm), index("mensagens_site_criado_idx").on(t.criadoEm)],
+);
