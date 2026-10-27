@@ -313,7 +313,13 @@ describe("simulador", () => {
 
 describe("Central", () => {
   it("uma linha por loja com volume, equipe, vendas e custo", async () => {
-    const [l] = await painelAtendimento(db);
+    // Outra loja com movimento: os números de uma não podem vazar para a outra.
+    const [outra] = await db.insert(empresas).values({ nome: "Zeca Ótica", atividade: "comercio", regime: "mei" }).returning();
+    await db.insert(agentesWhatsapp).values({ empresaId: outra.id, phoneNumberId: "PN-OUTRA" });
+    await receberMensagem(db, chegou("oi, fazem lente?", "5521900001111", "PN-OUTRA"));
+    const lojas = await painelAtendimento(db);
+    expect(lojas.find((x) => x.empresaId === outra.id)).toMatchObject({ conversas7d: 1, comEquipe: 0, vendas30d: 0 });
+    const l = lojas.find((x) => x.empresaId === loja.id)!;
     expect(l).toMatchObject({ empresa: "Café Tauá", nome: "Bia", conectado: true, vendas30d: 1, vendas30dCentavos: 1_200 });
     expect(l.conversas7d).toBe(6);
     expect(l.comEquipe).toBe(1);

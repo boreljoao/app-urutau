@@ -699,6 +699,7 @@ export async function painelAtendimento(db: BancoDeDados, agora = new Date()) {
   const inicioDoDia = new Date(`${hoje(agora)}T00:00:00-03:00`).toISOString();
   const seteDias = new Date(agora.getTime() - 7 * 86_400_000).toISOString();
   const trintaDias = new Date(agora.getTime() - 30 * 86_400_000);
+  // Subconsultas com o nome da tabela escrito: o Drizzle só qualifica a coluna quando há join.
   const linhas = await db
     .select({
       empresaId: agentesWhatsapp.empresaId,
@@ -711,19 +712,19 @@ export async function painelAtendimento(db: BancoDeDados, agora = new Date()) {
       conectado: sql<boolean>`(${agentesWhatsapp.phoneNumberId} is not null and ${agentesWhatsapp.tokenCifrado} is not null)`,
       ultimoErro: agentesWhatsapp.ultimoErro,
       ultimoErroEm: agentesWhatsapp.ultimoErroEm,
-      conversasHoje: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and c.ultima_entrada_em >= ${inicioDoDia})`,
-      conversas7d: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and c.ultima_entrada_em >= ${seteDias})`,
-      comEquipe: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and c.status = 'humano')`,
-      naoLidas: sql<number>`(select coalesce(sum(c.nao_lidas), 0)::int from ${conversas} c where c.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp')`,
-      ultimaAtividade: sql<Date | null>`(select max(c.ultima_mensagem_em) from ${conversas} c where c.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp')`,
-      respostasAgente7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and m.autor = 'agente' and m.status in ('enviada','entregue','lida') and m.criado_em >= ${seteDias})`,
-      respostasEquipe7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and m.autor = 'humano' and m.criado_em >= ${seteDias})`,
-      aprovar: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and m.status = 'rascunho')`,
-      falhas7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m where m.empresa_id = ${agentesWhatsapp.empresaId} and m.status = 'falhou' and m.criado_em >= ${seteDias})`,
-      tempoMedioMs: sql<number | null>`(select avg(m.tempo_resposta_ms)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = ${agentesWhatsapp.empresaId} and c.canal = 'whatsapp' and m.autor = 'agente' and m.tempo_resposta_ms is not null and m.criado_em >= ${seteDias})`,
-      custo30dMicros: sql<number>`(select coalesce(sum(m.custo_micros_usd), 0)::bigint from ${mensagensWhatsapp} m where m.empresa_id = ${agentesWhatsapp.empresaId} and m.criado_em >= ${trintaDias.toISOString()})`,
-      vendas30d: sql<number>`(select count(*)::int from ${vendas} v where v.empresa_id = ${agentesWhatsapp.empresaId} and v.origem = 'whatsapp' and v.excluido_em is null and v.data >= ${hoje(trintaDias)})`,
-      vendas30dCentavos: sql<number>`(select coalesce(sum(v.valor_centavos), 0)::bigint from ${vendas} v where v.empresa_id = ${agentesWhatsapp.empresaId} and v.origem = 'whatsapp' and v.excluido_em is null and v.data >= ${hoje(trintaDias)})`,
+      conversasHoje: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and c.ultima_entrada_em >= ${inicioDoDia})`,
+      conversas7d: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and c.ultima_entrada_em >= ${seteDias})`,
+      comEquipe: sql<number>`(select count(*)::int from ${conversas} c where c.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and c.status = 'humano')`,
+      naoLidas: sql<number>`(select coalesce(sum(c.nao_lidas), 0)::int from ${conversas} c where c.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp')`,
+      ultimaAtividade: sql<Date | null>`(select max(c.ultima_mensagem_em) from ${conversas} c where c.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp')`,
+      respostasAgente7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and m.autor = 'agente' and m.status in ('enviada','entregue','lida') and m.criado_em >= ${seteDias})`,
+      respostasEquipe7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and m.autor = 'humano' and m.criado_em >= ${seteDias})`,
+      aprovar: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and m.status = 'rascunho')`,
+      falhas7d: sql<number>`(select count(*)::int from ${mensagensWhatsapp} m where m.empresa_id = "agentes_whatsapp"."empresa_id" and m.status = 'falhou' and m.criado_em >= ${seteDias})`,
+      tempoMedioMs: sql<number | null>`(select avg(m.tempo_resposta_ms)::int from ${mensagensWhatsapp} m join ${conversas} c on c.id = m.conversa_id where m.empresa_id = "agentes_whatsapp"."empresa_id" and c.canal = 'whatsapp' and m.autor = 'agente' and m.tempo_resposta_ms is not null and m.criado_em >= ${seteDias})`,
+      custo30dMicros: sql<number>`(select coalesce(sum(m.custo_micros_usd), 0)::bigint from ${mensagensWhatsapp} m where m.empresa_id = "agentes_whatsapp"."empresa_id" and m.criado_em >= ${trintaDias.toISOString()})`,
+      vendas30d: sql<number>`(select count(*)::int from ${vendas} v where v.empresa_id = "agentes_whatsapp"."empresa_id" and v.origem = 'whatsapp' and v.excluido_em is null and v.data >= ${hoje(trintaDias)})`,
+      vendas30dCentavos: sql<number>`(select coalesce(sum(v.valor_centavos), 0)::bigint from ${vendas} v where v.empresa_id = "agentes_whatsapp"."empresa_id" and v.origem = 'whatsapp' and v.excluido_em is null and v.data >= ${hoje(trintaDias)})`,
     })
     .from(agentesWhatsapp)
     .innerJoin(empresas, eq(empresas.id, agentesWhatsapp.empresaId))
