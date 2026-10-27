@@ -39,6 +39,7 @@ import { impostoDoMes } from "../src/lib/servidor/fiscal";
 import { sincronizarFolha } from "../src/lib/servidor/folha";
 import { prepararEmpresa } from "../src/lib/servidor/automaticos";
 import { semearCentral } from "./seed-central";
+import { semearComercial } from "./seed-comercial";
 import { semearRevenda } from "./seed-revenda";
 
 const url = process.argv[2] ?? process.env.DATABASE_URL!;
@@ -486,7 +487,8 @@ for (const e of await db.select().from(empresas)) {
 console.log("Fase 4: despesas recorrentes, guias de impostos e férias registradas.");
 
 // ── Fase 6: Central Urutau (equipe, metas, anotações, site) ──────────────────
-await semearCentral(db, { senhaHash, admin });
+const equipe = await semearCentral(db, { senhaHash, admin });
+await semearComercial(db, equipe);
 console.log("Fase 6: equipe Urutau com metas e anotações.");
 
 await cliente.end();

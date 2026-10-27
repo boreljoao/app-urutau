@@ -61,9 +61,12 @@ para o Anexo III depois de contratar) e **Urutau Manutenção Industrial** (Lucr
    *Minha conta*). Quem é equipe vê a Central `/admin` e entra em qualquer empresa com os poderes do dono (com um aviso no topo).
 6. **Rotina diária**: crie a variável `CRON_SECRET` (valor longo e aleatório). A Vercel chama `/api/cron` todo dia às 6h
    (horário de Brasília; `vercel.json`).
-7. **Site urutau.io**: o site manda visitas, contatos e cliques no WhatsApp com `POST /api/site/evento`
-   (`{"tipo": "visita" | "contato" | "whatsapp", "pagina", "nome", "contato", "mensagem"}`). Só as origens de `SITE_ORIGENS`
-   são aceitas (padrão: `https://urutau.io,https://www.urutau.io`).
+7. **Site urutau.io**: o site manda visitas, contatos, cliques no WhatsApp e o diagnóstico com `POST /api/site/evento`
+   (`{"tipo": "visita" | "contato" | "whatsapp" | "diagnostico", "pagina", "nome", "negocio", "contato", "mensagem", "dores": [], "tamanho"}`).
+   Contato e diagnóstico viram lead no Comercial. Só as origens de `SITE_ORIGENS` são aceitas
+   (padrão: `https://urutau.io,https://www.urutau.io`).
+8. **Prospecção**: o robô [google-maps-scraper-kit](https://github.com/Mahanaicoach/google-maps-scraper-kit) roda num computador
+   com Docker e gera um CSV; importe em *Comercial → Prospecção*. Use `--full` para vir latitude/longitude (mapa).
 
 **No celular**: abra o link e use *Compartilhar → Adicionar à Tela de Início* (iPhone/Safari) ou
 *⋮ → Instalar app* (Android/Chrome). O urutau abre em tela cheia, com ícone próprio.
@@ -164,4 +167,6 @@ tests/                 Vitest
    auditoria, fila de tarefas e rotina diária
 6. ✅ Central Urutau: a área de cada pessoa da equipe (metas do mês com ritmo, clientes sob responsabilidade, anotações),
    quem está online e em qual tela, o que aconteceu na equipe e nos clientes, e os sinais do site urutau.io
-7. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp
+7. ✅ Comercial da Urutau: leads (site, diagnóstico, ligação, indicação, prospecção), funil em colunas, histórico de contatos
+   com retorno marcado, propostas (mensal + entrada), mapa dos leads e importação do CSV do robô do Google Maps
+8. Estoque de veículos e agenda de visitas/test drive (revenda); depois atendente no WhatsApp

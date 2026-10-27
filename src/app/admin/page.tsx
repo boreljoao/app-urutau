@@ -9,7 +9,7 @@ import { ListaMetas } from "@/components/central/ListaMetas";
 import { Avatar, Ponto, TituloBloco, Vazio } from "@/components/central/Pecas";
 import { obterDb } from "@/db";
 import { fracaoDoMes, montarAtencao, presenca, primeiroNome, quando, ritmo, rotuloDaTela, variacao } from "@/lib/central";
-import { hoje, mesAtual, nomeDoMes, somarMeses } from "@/lib/datas";
+import { hoje, mesAtual, nomeDoMes, somarDias, somarMeses } from "@/lib/datas";
 import { formatarReais } from "@/lib/dinheiro";
 import { criarAfazer, criarMeta, criarNota } from "@/lib/servidor/acoes-central";
 import {
@@ -25,6 +25,7 @@ import {
   pessoasOnlineNasEmpresas,
   resumoDoSite,
 } from "@/lib/servidor/central";
+import { proximosContatos } from "@/lib/servidor/comercial";
 
 export const metadata = { title: "Visão geral" };
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export default async function VisaoGeral() {
   const fracao = fracaoDoMes(mes, diaDeHoje);
   const nomeMes = nomeDoMes(mes).split(" ")[0];
   const nomeMesAnterior = nomeDoMes(somarMeses(mes, -1)).split(" ")[0];
-  const [equipe, metas, empresas, notas, atividade, onlineNosClientes, site, movimento, abertas, feitas7, contatos] = await Promise.all([
+  const [equipe, metas, empresas, notas, atividade, onlineNosClientes, site, movimento, abertas, feitas7, contatos, retornos] = await Promise.all([
     listarEquipe(db),
     metasDoMes(db, mes),
     empresasDaCentral(db, mes, undefined, hojeData),
@@ -52,6 +53,7 @@ export default async function VisaoGeral() {
     listarAfazeres(db),
     afazeresFeitosDesde(db, 7, agora),
     contatosRecentesDoSite(db, 48, agora),
+    proximosContatos(db, somarDias(hojeData, -1), 20),
   ]);
   const nomeDaEmpresa = (id: string) => empresas.find((e) => e.id === id)?.nome;
   const posicao = new Map(equipe.map((p, i) => [p.id, i]));
@@ -66,6 +68,7 @@ export default async function VisaoGeral() {
     afazeresAtrasados: atrasadas.map((a) => ({ id: a.id, titulo: a.titulo, prazo: a.prazo!, responsavel: a.responsavel })),
     contatosSite: contatos,
     senhasProvisorias: equipe.filter((p) => p.senhaProvisoria),
+    retornosAtrasados: retornos.map((r) => ({ id: r.id, nome: r.nome, proximoContato: r.proximoContato!, responsavel: r.responsavel })),
   });
 
   const online = equipe.filter((p) => presenca(p.vistoEm, agora).estado === "online");

@@ -192,3 +192,26 @@ body {
     animation: none;
   }
 }
+
+/* Mapa da Central: o mapa claro do OpenStreetMap vira noite, sem mudar a cor dos pontos. */
+.mapa-central {
+  background: #0b0f1d;
+}
+.mapa-central .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.8) contrast(0.9) saturate(0.4);
+}
+.mapa-central .leaflet-control-attribution {
+  background: rgba(11, 15, 29, 0.8);
+  color: var(--texto-meta);
+}
+.mapa-central .leaflet-control-attribution a {
+  color: var(--texto-suave);
+}
+.mapa-central .leaflet-popup-content-wrapper,
+.mapa-central .leaflet-popup-tip {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+.mapa-central .leaflet-popup-content a {
+  color: var(--destaque);
+}

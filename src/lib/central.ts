@@ -184,6 +184,8 @@ export interface EntradaAtencao {
   afazeresAtrasados: { id: string; titulo: string; prazo: string; responsavel: string | null }[];
   contatosSite: { id: string; tipo: string; nome: string | null; contato: string | null; criadoEm: Date }[];
   senhasProvisorias: { id: string; nome: string }[];
+  /** Leads com retorno marcado para antes de hoje. */
+  retornosAtrasados?: { id: string; nome: string; proximoContato: string; responsavel: string | null }[];
 }
 
 export interface ItemAtencao {
@@ -223,6 +225,16 @@ export function montarAtencao(e: EntradaAtencao): ItemAtencao[] {
       texto: `${a.titulo} venceu em ${d}/${m}`,
       detalhe: a.responsavel ? `com ${primeiroNome(a.responsavel)}` : "sem responsável",
       link: "/admin#afazeres",
+    });
+  }
+  for (const l of e.retornosAtrasados ?? []) {
+    const [, m, d] = l.proximoContato.split("-");
+    itens.push({
+      chave: `retorno-${l.id}`,
+      nivel: "alto",
+      texto: `Retornar para ${l.nome} (era ${d}/${m})`,
+      detalhe: l.responsavel ? `com ${primeiroNome(l.responsavel)}` : "lead sem responsável",
+      link: `/admin/comercial/leads/${l.id}`,
     });
   }
   for (const emp of e.empresas) {

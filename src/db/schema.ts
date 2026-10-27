@@ -5,6 +5,7 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   foreignKey,
   index,
   integer,
@@ -91,7 +92,13 @@ export const origemClienteEnum = pgEnum("origem_cliente", ["manual", "whatsapp",
 export const atorEnum = pgEnum("ator", ["usuario", "admin", "agente", "sistema"]);
 export const statusTarefaEnum = pgEnum("status_tarefa", ["pendente", "executando", "concluida", "falhou"]);
 export const tipoMetaEnum = pgEnum("tipo_meta", ["valor", "quantidade"]);
-export const tipoEventoSiteEnum = pgEnum("tipo_evento_site", ["visita", "contato", "whatsapp"]);
+export const tipoEventoSiteEnum = pgEnum("tipo_evento_site", ["visita", "contato", "whatsapp", "diagnostico"]);
+/** Por onde o lead chegou até a Urutau. */
+export const origemLeadEnum = pgEnum("origem_lead", ["site", "diagnostico", "whatsapp", "ligacao", "instagram", "indicacao", "prospeccao", "outro"]);
+/** Funil comercial da Urutau, na ordem. */
+export const etapaLeadEnum = pgEnum("etapa_lead", ["novo", "contatado", "diagnostico", "proposta", "negociacao", "ganho", "perdido"]);
+export const tipoInteracaoEnum = pgEnum("tipo_interacao", ["ligacao", "whatsapp", "email", "reuniao", "visita", "nota"]);
+export const statusPropostaEnum = pgEnum("status_proposta", ["rascunho", "enviada", "aceita", "recusada"]);
 
 // ─── Acesso ──────────────────────────────────────────────────────────────────
 
@@ -762,6 +769,105 @@ export const afazeres = pgTable(
   (t) => [index("afazeres_abertos_idx").on(t.feitoEm, t.prazo)],
 );
 
+// ─── Comercial da Urutau ─────────────────────────────────────────────────────
+
+/**
+ * Quem pode virar cliente da Urutau: veio pelo site, pelo diagnóstico, ligou, foi indicado
+ * ou foi achado na prospecção (Google Maps). `chave` evita importar o mesmo lugar duas vezes.
+ */
+export const leads = pgTable(
+  "leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nome: text("nome").notNull(),
+    /** Pessoa de contato, quando o lead é uma empresa. */
+    contato: text("contato"),
+    telefone: text("telefone"),
+    email: text("email"),
+    site: text("site"),
+    instagram: text("instagram"),
+    categoria: text("categoria"),
+    endereco: text("endereco"),
+    cidade: text("cidade"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    /** Nota no Google (0 a 5) e quantas avaliações, quando veio da prospecção. */
+    nota: doublePrecision("nota"),
+    avaliacoes: integer("avaliacoes"),
+    origem: origemLeadEnum("origem").notNull(),
+    etapa: etapaLeadEnum("etapa").notNull().default("novo"),
+    /** Frentes que interessam: atende, flow, financas, gestao, sites, ads. */
+    interesses: text("interesses").array().notNull().default(sql`'{}'::text[]`),
+    /** Frases marcadas no diagnóstico do site. */
+    dores: text("dores").array().notNull().default(sql`'{}'::text[]`),
+    tamanho: text("tamanho"),
+    observacao: text("observacao"),
+    valorEstimadoCentavos: centavos("valor_estimado_centavos"),
+    proximoContato: date("proximo_contato"),
+    motivoPerda: text("motivo_perda"),
+    responsavelId: uuid("responsavel_id").references(() => usuarios.id, { onDelete: "set null" }),
+    /** A empresa criada no app quando o lead fechou. */
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+    chave: text("chave").unique(),
+    /** Nome do lote de prospecção ("dentistas em Maricá · 27/10"). */
+    lote: text("lote"),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [
+    index("leads_etapa_idx").on(t.etapa),
+    index("leads_criado_idx").on(t.criadoEm),
+    check("leads_nota_faixa", sql`${t.nota} is null or (${t.nota} >= 0 and ${t.nota} <= 5)`),
+  ],
+);
+
+/** Cada conversa com um lead: ligação, WhatsApp, reunião… e as mudanças de etapa. */
+export const interacoes = pgTable(
+  "interacoes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    autorId: uuid("autor_id").references(() => usuarios.id, { onDelete: "set null" }),
+    tipo: tipoInteracaoEnum("tipo").notNull(),
+    texto: text("texto").notNull().default(""),
+    /** Mudança de etapa registrada junto, quando houve. */
+    etapaDe: etapaLeadEnum("etapa_de"),
+    etapaPara: etapaLeadEnum("etapa_para"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("interacoes_lead_idx").on(t.leadId, t.criadoEm)],
+);
+
+/** Proposta comercial da Urutau: o que entra, quanto por mês e quanto de entrada. */
+export const propostas = pgTable(
+  "propostas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+    titulo: text("titulo").notNull(),
+    servicos: text("servicos").array().notNull().default(sql`'{}'::text[]`),
+    valorMensalCentavos: centavos("valor_mensal_centavos").notNull().default(0),
+    valorUnicoCentavos: centavos("valor_unico_centavos").notNull().default(0),
+    status: statusPropostaEnum("status").notNull().default("rascunho"),
+    validade: date("validade"),
+    observacao: text("observacao"),
+    enviadaEm: timestamp("enviada_em", { withTimezone: true }),
+    respondidaEm: timestamp("respondida_em", { withTimezone: true }),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+  (t) => [
+    check("propostas_valores", sql`${t.valorMensalCentavos} >= 0 and ${t.valorUnicoCentavos} >= 0`),
+    index("propostas_status_idx").on(t.status),
+  ],
+);
+
 /** O que o site urutau.io manda (POST /api/site/evento): visitas, contatos, cliques no WhatsApp. */
 export const eventosSite = pgTable(
   "eventos_site",
@@ -788,3 +894,7 @@ export type Perfil = (typeof perfilEnum.enumValues)[number];
 export type Modulo = (typeof moduloEnum.enumValues)[number];
 export type OrigemVenda = (typeof origemVendaEnum.enumValues)[number];
 export type TipoMeta = (typeof tipoMetaEnum.enumValues)[number];
+export type OrigemLead = (typeof origemLeadEnum.enumValues)[number];
+export type EtapaLead = (typeof etapaLeadEnum.enumValues)[number];
+export type TipoInteracao = (typeof tipoInteracaoEnum.enumValues)[number];
+export type StatusProposta = (typeof statusPropostaEnum.enumValues)[number];

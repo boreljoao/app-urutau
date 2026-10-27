@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/admin", rotulo: "Visão geral", exato: true },
   { href: "/admin/equipe", rotulo: "Equipe" },
   { href: "/admin/empresas", rotulo: "Clientes" },
+  { href: "/admin/comercial", rotulo: "Comercial" },
 ];
 
 /** A tela aberta só muda de cinza para claro: nada de pílula colorida. */
