@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { hash, verify } from "@node-rs/argon2";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -43,13 +43,20 @@ export async function encerrarSessao() {
   jar.delete(COOKIE);
 }
 
-export type UsuarioAtual = { id: string; nome: string; email: string; superadmin: boolean; senhaProvisoria: boolean };
+export type UsuarioAtual = { id: string; nome: string; email: string; superadmin: boolean; senhaProvisoria: boolean; socio: boolean };
 
 export const obterUsuarioAtual = cache(async (): Promise<UsuarioAtual | null> => {
   const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   const [linha] = await obterDb()
-    .select({ id: usuarios.id, nome: usuarios.nome, email: usuarios.email, superadmin: usuarios.superadmin, senhaProvisoria: usuarios.senhaProvisoria })
+    .select({
+      id: usuarios.id,
+      nome: usuarios.nome,
+      email: usuarios.email,
+      superadmin: usuarios.superadmin,
+      senhaProvisoria: usuarios.senhaProvisoria,
+      socio: sql<boolean>`${usuarios.superadmin} and ${usuarios.papelEquipe} = 'socio'`,
+    })
     .from(sessoes)
     .innerJoin(usuarios, eq(usuarios.id, sessoes.usuarioId))
     .where(and(eq(sessoes.tokenHash, hashToken(token)), gt(sessoes.expiraEm, new Date())))

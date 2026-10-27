@@ -41,6 +41,7 @@ export const atividadeEnum = pgEnum("atividade", ["comercio", "servicos", "ambos
 export const regimeEnum = pgEnum("regime_tributario", ["mei", "simples", "presumido", "real"]);
 export const anexoEnum = pgEnum("anexo_simples", ["I", "II", "III", "IV", "V"]);
 export const papelEnum = pgEnum("papel", ["dono", "colaborador", "contador"]);
+export const papelEquipeEnum = pgEnum("papel_equipe", ["socio", "equipe"]);
 export const naturezaEnum = pgEnum("natureza_receita", ["comercio", "servico"]);
 export const formaPagamentoEnum = pgEnum("forma_pagamento", [
   "dinheiro",
@@ -108,6 +109,8 @@ export const usuarios = pgTable("usuarios", {
   email: text("email").notNull().unique(),
   senhaHash: text("senha_hash").notNull(),
   superadmin: boolean("superadmin").notNull().default(false),
+  /** Dentro da equipe Urutau: sócio vê as finanças da empresa; equipe vê só as próprias. */
+  papelEquipe: papelEquipeEnum("papel_equipe").notNull().default("equipe"),
   /** A senha foi gerada pelo painel Urutau: a pessoa ainda precisa trocar. */
   senhaProvisoria: boolean("senha_provisoria").notNull().default(false),
   /** Último sinal de vida de uma aba aberta (POST /api/presenca, a cada minuto). */
@@ -925,3 +928,209 @@ export type OrigemLead = (typeof origemLeadEnum.enumValues)[number];
 export type EtapaLead = (typeof etapaLeadEnum.enumValues)[number];
 export type TipoInteracao = (typeof tipoInteracaoEnum.enumValues)[number];
 export type StatusProposta = (typeof statusPropostaEnum.enumValues)[number];
+
+// ─── Receita da Urutau: clientes, contratos, cobranças e ganhos ──────────────
+
+export const servicoUrutauEnum = pgEnum("servico_urutau", ["reels", "post", "criativo", "trafego", "gestao", "automacao", "atendente", "site", "sistema", "outro"]);
+export const recorrenciaEnum = pgEnum("recorrencia", ["mensal", "unico"]);
+export const statusContratoEnum = pgEnum("status_contrato", ["ativo", "encerrado", "cancelado"]);
+export const tipoMultaEnum = pgEnum("tipo_multa", ["nenhuma", "valor", "percentual_restante"]);
+export const statusCobrancaEnum = pgEnum("status_cobranca", ["a_receber", "pago", "cancelada"]);
+export const tipoGanhoEnum = pgEnum("tipo_ganho", ["trouxe", "execucao"]);
+export const statusGanhoEnum = pgEnum("status_ganho", ["a_pagar", "pago"]);
+export const categoriaCustoEnum = pgEnum("categoria_custo", ["ferramenta", "freelancer", "imposto", "marketing", "estrutura", "outro"]);
+
+/**
+ * Cliente da Urutau (quem paga a Urutau). Pode usar o sistema ou não: `empresaId` liga à empresa
+ * no app para comparar o que ele vende com o que paga. `quemTrouxeId` null = veio sozinho (os 10% vão para o bolo).
+ */
+export const clientesUrutau = pgTable(
+  "clientes_urutau",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nome: text("nome").notNull(),
+    documento: text("documento"),
+    contato: text("contato"),
+    telefone: text("telefone"),
+    email: text("email"),
+    cidade: text("cidade"),
+    ramo: text("ramo"),
+    quemTrouxeId: uuid("quem_trouxe_id").references(() => usuarios.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    empresaId: uuid("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+    /** Faturamento mensal do cliente informado à mão (quando ele não usa o sistema). */
+    faturamentoInformadoCentavos: centavos("faturamento_informado_centavos"),
+    observacao: text("observacao"),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [index("clientes_urutau_nome_idx").on(t.nome)],
+);
+
+export const contratos = pgTable(
+  "contratos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clienteId: uuid("cliente_id")
+      .notNull()
+      .references(() => clientesUrutau.id, { onDelete: "cascade" }),
+    /** Primeiro mês cobrado (dia 1). */
+    inicio: date("inicio").notNull(),
+    /** Duração em meses; null = sem prazo (até alguém encerrar). */
+    meses: integer("meses"),
+    diaVencimento: integer("dia_vencimento").notNull().default(10),
+    /** Desconto sobre o contrato (pcm) nos primeiros `descontoMeses` meses; null = o contrato todo. */
+    descontoPcm: integer("desconto_pcm").notNull().default(0),
+    descontoMeses: integer("desconto_meses"),
+    multaTipo: tipoMultaEnum("multa_tipo").notNull().default("nenhuma"),
+    /** Centavos (multa em valor) ou pcm (percentual do que falta do contrato). */
+    multaValor: bigint("multa_valor", { mode: "number" }).notNull().default(0),
+    status: statusContratoEnum("status").notNull().default("ativo"),
+    /** Último mês cobrado quando o contrato foi encerrado ou cancelado. */
+    encerradoEm: date("encerrado_em"),
+    motivoEncerramento: text("motivo_encerramento"),
+    observacao: text("observacao"),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+  (t) => [
+    index("contratos_cliente_idx").on(t.clienteId),
+    check("contratos_dia_vencimento", sql`${t.diaVencimento} between 1 and 28`),
+    check("contratos_desconto", sql`${t.descontoPcm} between 0 and 100000`),
+    check("contratos_meses", sql`${t.meses} is null or ${t.meses} > 0`),
+    check("contratos_inicio_dia_1", sql`extract(day from ${t.inicio}) = 1`),
+  ],
+);
+
+/**
+ * Cada serviço do contrato. Os percentuais ficam gravados aqui no dia do cadastro (regra congelada):
+ * mudar a tabela de regras depois não mexe em contrato já fechado.
+ */
+export const contratoItens = pgTable(
+  "contrato_itens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contratoId: uuid("contrato_id")
+      .notNull()
+      .references(() => contratos.id, { onDelete: "cascade" }),
+    servico: servicoUrutauEnum("servico").notNull(),
+    descricao: text("descricao").notNull().default(""),
+    recorrencia: recorrenciaEnum("recorrencia").notNull(),
+    valorCentavos: centavos("valor_centavos").notNull(),
+    /** Custo para a Urutau, na mesma recorrência do serviço. */
+    custoCentavos: centavos("custo_centavos").notNull().default(0),
+    executorId: uuid("executor_id").references(() => usuarios.id, { onDelete: "set null" }),
+    executorPcm: integer("executor_pcm").notNull().default(0),
+    /** O executor (normalmente um sócio) abriu mão da comissão: o valor fica no bolo. */
+    executorAbriuMao: boolean("executor_abriu_mao").notNull().default(false),
+    trouxePcm: integer("trouxe_pcm").notNull().default(0),
+    /** Primeiro mês cobrado deste serviço (dia 1); null = o início do contrato. Projeto único é cobrado só nesse mês. */
+    inicio: date("inicio"),
+    /** Último mês cobrado (serviço retirado do contrato); null = segue enquanto o contrato durar. */
+    ate: date("ate"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [
+    index("contrato_itens_contrato_idx").on(t.contratoId),
+    check("contrato_itens_valores", sql`${t.valorCentavos} >= 0 and ${t.custoCentavos} >= 0`),
+    check("contrato_itens_pcm", sql`${t.executorPcm} between 0 and 100000 and ${t.trouxePcm} between 0 and 100000`),
+  ],
+);
+
+/** A cobrança de um mês do contrato. Projeto único entra na cobrança do primeiro mês. */
+export const cobrancas = pgTable(
+  "cobrancas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contratoId: uuid("contrato_id")
+      .notNull()
+      .references(() => contratos.id, { onDelete: "cascade" }),
+    competencia: date("competencia").notNull(),
+    vencimento: date("vencimento").notNull(),
+    valorCentavos: centavos("valor_centavos").notNull(),
+    status: statusCobrancaEnum("status").notNull().default("a_receber"),
+    pagoEm: date("pago_em"),
+    valorPagoCentavos: centavos("valor_pago_centavos"),
+    observacao: text("observacao"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [unique("cobrancas_contrato_mes").on(t.contratoId, t.competencia), index("cobrancas_competencia_idx").on(t.competencia)],
+);
+
+/** O que compõe a cobrança, serviço a serviço, já com o desconto do mês. Base dos ganhos. */
+export const cobrancaItens = pgTable(
+  "cobranca_itens",
+  {
+    cobrancaId: uuid("cobranca_id")
+      .notNull()
+      .references(() => cobrancas.id, { onDelete: "cascade" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => contratoItens.id, { onDelete: "cascade" }),
+    valorCentavos: centavos("valor_centavos").notNull(),
+    custoCentavos: centavos("custo_centavos").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.cobrancaId, t.itemId] })],
+);
+
+/** Comissão de alguém sobre uma cobrança paga: por ter trazido o cliente ou por executar o serviço. */
+export const ganhos = pgTable(
+  "ganhos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    cobrancaId: uuid("cobranca_id")
+      .notNull()
+      .references(() => cobrancas.id, { onDelete: "cascade" }),
+    itemId: uuid("item_id")
+      .notNull()
+      .references(() => contratoItens.id, { onDelete: "cascade" }),
+    usuarioId: uuid("usuario_id")
+      .notNull()
+      .references(() => usuarios.id, { onDelete: "cascade" }),
+    tipo: tipoGanhoEnum("tipo").notNull(),
+    baseCentavos: centavos("base_centavos").notNull(),
+    pcm: integer("pcm").notNull(),
+    valorCentavos: centavos("valor_centavos").notNull(),
+    status: statusGanhoEnum("status").notNull().default("a_pagar"),
+    pagoEm: date("pago_em"),
+    criadoEm: criadoEm(),
+  },
+  (t) => [index("ganhos_usuario_idx").on(t.usuarioId, t.status), index("ganhos_cobranca_idx").on(t.cobrancaId)],
+);
+
+/** Custos da Urutau: ferramentas, freelancers, DAS… Mensal vale de `inicio` até `fim`; único só no mês de `inicio`. */
+export const custosUrutau = pgTable(
+  "custos_urutau",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    descricao: text("descricao").notNull(),
+    categoria: categoriaCustoEnum("categoria").notNull(),
+    valorCentavos: centavos("valor_centavos").notNull(),
+    recorrencia: recorrenciaEnum("recorrencia").notNull(),
+    inicio: date("inicio").notNull(),
+    fim: date("fim"),
+    clienteId: uuid("cliente_id").references(() => clientesUrutau.id, { onDelete: "set null" }),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [check("custos_urutau_valor", sql`${t.valorCentavos} > 0`), check("custos_urutau_inicio_dia_1", sql`extract(day from ${t.inicio}) = 1`)],
+);
+
+/** Comissão de quem executa, por serviço (os sócios editam em Receita → Regras). */
+export const regrasComissao = pgTable("regras_comissao", {
+  servico: servicoUrutauEnum("servico").primaryKey(),
+  executorPcm: integer("executor_pcm").notNull(),
+});
+
+/** Parâmetros da divisão: % de quem trouxe, reserva de caixa, diferença entre os sócios e qual sócio leva a mais. */
+export const parametrosCentral = pgTable("parametros_central", {
+  chave: text("chave").primaryKey(),
+  valor: text("valor").notNull(),
+});
+
+export type ServicoUrutau = (typeof servicoUrutauEnum.enumValues)[number];
+export type Recorrencia = (typeof recorrenciaEnum.enumValues)[number];

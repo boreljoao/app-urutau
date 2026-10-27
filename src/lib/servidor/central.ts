@@ -60,7 +60,7 @@ export async function empresasDaCentral(db: BancoDeDados, mes: Mes, responsavelI
       responsavelId: empresas.responsavelId,
       vendasMesAnterior: sql<number>`(select coalesce(sum(v.valor_centavos), 0)::bigint from vendas v where v.empresa_id = "empresas"."id" and v.excluido_em is null and v.data between ${inicioAnt} and ${fimAnt})`.mapWith(Number),
       conferirDesde: sql<Date | null>`(select min(v.criado_em) from vendas v where v.empresa_id = "empresas"."id" and v.conferido_em is null and v.excluido_em is null)`.mapWith((v) => (v ? new Date(v) : null)),
-      vendasMes: sql<number>`(select coalesce(sum(v.valor_centavos), 0)::bigint from vendas v where v.empresa_id = "empresas"."id" and v.excluido_em is null and v.data between ${inicio} and ${fim})`.mapWith(Number),
+      vendasMes: sql<number>`(select coalesce(sum(v.valor_centavos), 0)::bigint from vendas v where v.empresa_id = "empresas"."id" and v.excluido_em is null and v.data >= ${inicio} and v.data < ${fim})`.mapWith(Number),
       aConferir: sql<number>`(select count(*)::int from vendas v where v.empresa_id = "empresas"."id" and v.conferido_em is null and v.excluido_em is null)`,
       // Último sinal de alguém do cliente (a equipe Urutau não conta).
       ultimoAcesso: sql<Date | null>`(select max(u.visto_em) from empresa_usuarios eu join usuarios u on u.id = eu.usuario_id where eu.empresa_id = "empresas"."id" and not u.superadmin)`.mapWith((v) => (v ? new Date(v) : null)),

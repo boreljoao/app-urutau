@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { BancoDeDados } from "@/db";
 import { type EtapaLead, type OrigemLead, type StatusProposta, empresas, interacoes, leads, propostas, usuarios } from "@/db/schema";
@@ -90,13 +90,14 @@ export async function contagemPorEtapa(db: BancoDeDados) {
 export async function resumoComercial(db: BancoDeDados, mes: Mes) {
   const { inicio, fim } = intervaloDoMes(mes);
   const de = new Date(`${inicio}T00:00:00-03:00`);
-  const ate = new Date(`${fim}T23:59:59.999-03:00`);
+  // `fim` é o dia 1 do mês seguinte (exclusivo).
+  const ate = new Date(`${fim}T00:00:00-03:00`);
   const [[novos], porOrigem, [abertas], [aceitas], [ganhos]] = await Promise.all([
-    db.select({ n: sql<number>`count(*)::int` }).from(leads).where(and(vivo, gte(leads.criadoEm, de), lte(leads.criadoEm, ate))),
+    db.select({ n: sql<number>`count(*)::int` }).from(leads).where(and(vivo, gte(leads.criadoEm, de), lt(leads.criadoEm, ate))),
     db
       .select({ origem: leads.origem, n: sql<number>`count(*)::int` })
       .from(leads)
-      .where(and(vivo, gte(leads.criadoEm, de), lte(leads.criadoEm, ate)))
+      .where(and(vivo, gte(leads.criadoEm, de), lt(leads.criadoEm, ate)))
       .groupBy(leads.origem),
     db
       .select({ n: sql<number>`count(*)::int`, mensal: sql<number>`coalesce(sum(${propostas.valorMensalCentavos}), 0)::bigint`.mapWith(Number), unico: sql<number>`coalesce(sum(${propostas.valorUnicoCentavos}), 0)::bigint`.mapWith(Number) })
@@ -105,11 +106,11 @@ export async function resumoComercial(db: BancoDeDados, mes: Mes) {
     db
       .select({ n: sql<number>`count(*)::int`, mensal: sql<number>`coalesce(sum(${propostas.valorMensalCentavos}), 0)::bigint`.mapWith(Number), unico: sql<number>`coalesce(sum(${propostas.valorUnicoCentavos}), 0)::bigint`.mapWith(Number) })
       .from(propostas)
-      .where(and(eq(propostas.status, "aceita"), gte(propostas.respondidaEm, de), lte(propostas.respondidaEm, ate))),
+      .where(and(eq(propostas.status, "aceita"), gte(propostas.respondidaEm, de), lt(propostas.respondidaEm, ate))),
     db
       .select({ n: sql<number>`count(distinct ${interacoes.leadId})::int` })
       .from(interacoes)
-      .where(and(eq(interacoes.etapaPara, "ganho"), gte(interacoes.criadoEm, de), lte(interacoes.criadoEm, ate))),
+      .where(and(eq(interacoes.etapaPara, "ganho"), gte(interacoes.criadoEm, de), lt(interacoes.criadoEm, ate))),
   ]);
   return {
     novos: novos.n,

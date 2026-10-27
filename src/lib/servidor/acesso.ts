@@ -68,3 +68,10 @@ export async function exigirSuperadmin(): Promise<UsuarioAtual> {
   if (!usuario.superadmin) notFound();
   return usuario;
 }
+
+/** Finanças da Urutau (receita, custos, ganhos dos outros): só os sócios; a equipe recebe 404. */
+export async function exigirSocio(): Promise<UsuarioAtual> {
+  const usuario = await exigirSuperadmin();
+  if (!usuario.socio) notFound();
+  return usuario;
+}
