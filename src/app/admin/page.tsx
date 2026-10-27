@@ -73,7 +73,7 @@ export default async function VisaoGeral() {
     contatosSite: contatos,
     senhasProvisorias: equipe.filter((p) => p.senhaProvisoria),
     retornosAtrasados: retornos.map((r) => ({ id: r.id, nome: r.nome, proximoContato: r.proximoContato!, responsavel: r.responsavel })),
-    chatEsperando: chat.map((c) => ({ id: c.id, nome: c.nome, motivo: c.motivoHumano, desde: c.ultimaMensagemEm })),
+    chatEsperando: chat.filter((c) => c.ultimoAutor === "cliente").map((c) => ({ id: c.id, nome: c.nome, motivo: c.motivoHumano, desde: c.ultimaMensagemEm })),
   });
 
   const online = equipe.filter((p) => presenca(p.vistoEm, agora).estado === "online");

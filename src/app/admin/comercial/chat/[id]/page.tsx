@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const mostrarContato = (c: string | null) => (c && /^\d+$/.test(c) ? formatarTelefone(c) : c);
-const SITUACAO = { agente: "o agente está atendendo", humano: "espera a equipe", encerrada: "encerrada" } as const;
+const SITUACAO = { agente: "o agente está atendendo", humano: "com a equipe", encerrada: "encerrada" } as const;
 
 export default async function ConversaDoSite({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

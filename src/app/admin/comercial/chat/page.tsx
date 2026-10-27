@@ -22,7 +22,8 @@ const FILTROS: { id: FiltroChat; rotulo: string }[] = [
 
 const STATUS: Record<string, { rotulo: string; cor: string }> = {
   agente: { rotulo: "com o agente", cor: "var(--positivo)" },
-  humano: { rotulo: "espera a equipe", cor: "var(--negativo)" },
+  humano: { rotulo: "com a equipe", cor: "var(--destaque)" },
+  esperando: { rotulo: "espera a equipe", cor: "var(--negativo)" },
   encerrada: { rotulo: "encerrada", cor: "var(--borda)" },
 };
 
@@ -99,7 +100,7 @@ export default async function ChatDoSite({ searchParams }: { searchParams: Promi
         ) : (
           <ul className="divide-y divide-borda">
             {lista.map((c) => {
-              const s = STATUS[c.status];
+              const s = STATUS[c.status === "humano" && c.ultimoAutor === "cliente" ? "esperando" : c.status];
               return (
                 <li key={c.id}>
                   <Link href={`/admin/comercial/chat/${c.id}`} className="-mx-2 flex items-start gap-3 rounded-lg px-2 py-3 hover:bg-superficie-2/60">

@@ -431,6 +431,8 @@ export async function listarConversasDoSite(db: BancoDeDados, filtro: FiltroChat
       criadoEm: conversasSite.criadoEm,
       mensagens: sql<number>`(select count(*) from "mensagens_site" m where m."conversa_id" = "conversas_site"."id" and m."autor" <> 'sistema')`.mapWith(Number),
       ultimaMensagem: sql<string | null>`(select m."texto" from "mensagens_site" m where m."conversa_id" = "conversas_site"."id" and m."autor" <> 'sistema' order by m."criado_em" desc limit 1)`,
+      /** Quem falou por último (sem contar o sistema): se foi o visitante, a equipe deve uma resposta. */
+      ultimoAutor: sql<"cliente" | "agente" | "humano" | null>`(select m."autor" from "mensagens_site" m where m."conversa_id" = "conversas_site"."id" and m."autor" <> 'sistema' order by m."criado_em" desc limit 1)`,
       custoMicros: sql<number>`(select coalesce(sum(m."custo_micros_usd"), 0) from "mensagens_site" m where m."conversa_id" = "conversas_site"."id")`.mapWith(Number),
     })
     .from(conversasSite)
@@ -469,7 +471,8 @@ export async function resumoDoChat(db: BancoDeDados, agora = new Date()) {
     .select({
       hoje: sql<number>`count(*) filter (where ${gt(conversasSite.criadoEm, dia)})`.mapWith(Number),
       semana: sql<number>`count(*) filter (where ${gt(conversasSite.criadoEm, semana)})`.mapWith(Number),
-      esperandoEquipe: sql<number>`count(*) filter (where ${eq(conversasSite.status, "humano")})`.mapWith(Number),
+      // Com a equipe e a última palavra é do visitante: alguém precisa responder.
+      esperandoEquipe: sql<number>`count(*) filter (where "conversas_site"."status" = 'humano' and (select m."autor" from "mensagens_site" m where m."conversa_id" = "conversas_site"."id" and m."autor" <> 'sistema' order by m."criado_em" desc limit 1) = 'cliente')`.mapWith(Number),
       contatos30d: sql<number>`count(*) filter (where ${conversasSite.leadId} is not null and ${gt(conversasSite.criadoEm, mes)})`.mapWith(Number),
       conversas30d: sql<number>`count(*) filter (where ${gt(conversasSite.criadoEm, mes)})`.mapWith(Number),
       naoLidas: sql<number>`coalesce(sum(${conversasSite.naoLidas}) filter (where ${eq(conversasSite.status, "humano")}), 0)`.mapWith(Number),

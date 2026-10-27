@@ -151,8 +151,12 @@ describe("chat do site", () => {
     expect(c.motivoHumano).toBe("Quer fechar contrato hoje");
     expect((await listarConversasDoSite(db, "equipe")).map((x) => x.id)).toContain(c.id);
 
+    expect((await resumoDoChat(db)).esperandoEquipe).toBe(1);
     const antes = new Date(Date.now() - 1);
     await responderNoSiteComoEquipe(db, c.id, "Oi! Aqui é o Borel, vamos fechar.", equipe.id);
+    // Respondida, continua com a equipe mas sai da fila de quem espera.
+    expect((await listarConversasDoSite(db, "equipe")).find((x) => x.id === c.id)?.ultimoAutor).toBe("humano");
+    expect((await resumoDoChat(db)).esperandoEquipe).toBe(0);
     const novas = await lerConversaDoSite(db, chave, antes);
     expect(novas?.mensagens.map((m) => [m.autor, m.texto])).toEqual([["humano", "Oi! Aqui é o Borel, vamos fechar."]]);
     // O que o sistema anota não aparece para o visitante.
