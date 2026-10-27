@@ -326,7 +326,8 @@ describe("Central", () => {
     expect(l.respostasEquipe7d).toBe(1);
     expect(l.custo30dMicros).toBeGreaterThan(0);
     const feed = await movimentoRecente(db, 5);
-    expect(feed[0]).toMatchObject({ empresa: "Café Tauá" });
+    expect(feed[0]).toMatchObject({ empresa: "Zeca Ótica", texto: "oi, fazem lente?" });
+    expect((await movimentoRecente(db, 5, loja.id)).every((m) => m.empresa === "Café Tauá")).toBe(true);
     expect(feed.every((m) => !m.telefone.startsWith("teste-"))).toBe(true);
   });
 });
