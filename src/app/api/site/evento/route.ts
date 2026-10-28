@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * o IP em si não é guardado.
  */
 
-const curto = (n: number) => z.string().trim().max(n).optional().transform((v) => v || null);
+const curto = (n: number) => z.string().trim().max(n).nullish().transform((v) => v || null);
 
 const esquema = z.object({
   tipo: z.enum(["visita", "contato", "whatsapp", "diagnostico", "secao"]),

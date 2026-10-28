@@ -19,8 +19,8 @@ const METODOS = "GET, POST, OPTIONS";
 const esquema = z.object({
   chave: z.string().refine(chaveDeChatValida),
   texto: z.string().trim().min(1).max(LIMITES_CHAT.texto * 2),
-  visitante: z.string().max(64).optional(),
-  pagina: z.string().max(200).optional(),
+  visitante: z.string().max(64).nullish(),
+  pagina: z.string().nullish().transform((p) => p?.slice(0, 200)),
 });
 
 export function OPTIONS(req: Request) {
