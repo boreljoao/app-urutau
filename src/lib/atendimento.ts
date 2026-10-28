@@ -22,7 +22,7 @@ export const MODELOS: PrecoModelo[] = [
   { id: "claude-sonnet-5-5", nome: "Claude Sonnet 5.5", entrada: 2, saida: 10, cacheLeitura: 0.2, cacheEscrita: 2.5, descricao: "Metade do custo do Opus, muito bom para atendimento do dia a dia." },
   { id: "claude-haiku-5-5", nome: "Claude Haiku 5.5", entrada: 0.1, saida: 0.5, cacheLeitura: 0.01, cacheEscrita: 0.125, descricao: "O mais barato e rápido, para perguntas simples e muito volume." },
 ];
-export const MODELO_PADRAO = "claude-opus-5-5";
+export const MODELO_PADRAO = "claude-haiku-5-5";
 export const precoDo = (modelo: string) => MODELOS.find((m) => modelo.startsWith(m.id)) ?? MODELOS[0];
 
 /**

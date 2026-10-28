@@ -19,7 +19,7 @@ import {
   type FichaVisitante,
 } from "@/lib/chat-site";
 import { normalizarTelefone } from "@/lib/validacao";
-import { ErroAtendimento, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
+import { ErroAtendimento, comSubstituto, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
 import { leadDoSite } from "./comercial";
 
 /**
@@ -271,8 +271,8 @@ function contextoDoMomento(c: Conversa, agora: Date) {
     .join("\n");
 }
 
-/** O chat do site usa o Sonnet: inteligente o bastante para vender e metade do custo do Opus. */
-export const MODELO_DO_CHAT = "claude-sonnet-5-5";
+/** O chat do site usa o Haiku: dá conta de tirar dúvida e anotar o visitante por uns centavos a conversa. */
+export const MODELO_DO_CHAT = "claude-haiku-5-5";
 const modeloDoChat = () => process.env.SITE_CHAT_MODELO || MODELO_DO_CHAT;
 
 async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, agora: Date) {
@@ -296,16 +296,15 @@ async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, 
   let recusou = false;
 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
+    const modelo = modeloDoChat();
     const r = await criar({
-      model: modeloDoChat(),
+      model: modelo,
       max_tokens: 1024,
       system,
       tools: FERRAMENTAS,
       messages: mensagens,
       output_config: { effort: "low" },
-      // Se o modelo recusar por política, a API tenta o substituto padrão antes de desistir.
-      fallbacks: "default",
-      betas: ["server-side-fallback-2026-07-01"],
+      ...comSubstituto(modelo),
     });
     uso.entrada += r.usage.input_tokens;
     uso.saida += r.usage.output_tokens;

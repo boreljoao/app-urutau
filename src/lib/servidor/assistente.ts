@@ -7,7 +7,7 @@ import { etapaLeadEnum, origemLeadEnum } from "@/db/schema";
 import { custoIaMicros } from "@/lib/atendimento";
 import { SOBRE_A_URUTAU } from "@/lib/chat-site";
 import { hoje, mesAtual, somarDias } from "@/lib/datas";
-import { ErroAtendimento, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
+import { ErroAtendimento, comSubstituto, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
 import { conversaDoSiteParaEquipe, fichaEmTexto, listarConversasDoSite, oQueOsVisitantesQuerem, resumoDoChat } from "./chat-site";
 import { contagemPorEtapa, listarLeads, obterLead, proximosContatos, resumoComercial } from "./comercial";
 
@@ -203,15 +203,15 @@ export async function perguntarAoAssistente(
   const consultas: string[] = [];
   try {
     for (let volta = 0; volta < MAX_VOLTAS; volta++) {
+      const modelo = process.env.ASSISTENTE_MODELO || MODELO_DO_ASSISTENTE;
       const r = await criar({
-        model: process.env.ASSISTENTE_MODELO || MODELO_DO_ASSISTENTE,
+        model: modelo,
         max_tokens: 2048,
         system,
         tools: FERRAMENTAS,
         messages: mensagens,
         output_config: { effort: "low" },
-        fallbacks: "default",
-        betas: ["server-side-fallback-2026-07-01"],
+        ...comSubstituto(modelo),
       });
       custoMicros += custoIaMicros(r.model, r.usage);
       if (r.stop_reason === "refusal") return { texto: "Não consigo ajudar com isso.", custoMicros, consultas };

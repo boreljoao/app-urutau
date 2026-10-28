@@ -1165,7 +1165,7 @@ export const agentesWhatsapp = pgTable(
     /** Quando chamar uma pessoa da loja. */
     quandoChamarHumano: text("quando_chamar_humano").notNull().default(""),
     modo: modoAgenteEnum("modo").notNull().default("aprovacao"),
-    modelo: text("modelo").notNull().default("claude-opus-5-5"),
+    modelo: text("modelo").notNull().default("claude-haiku-5-5"),
     /** Cloud API: o phone_number_id do número da loja (chega em todo webhook). */
     phoneNumberId: text("phone_number_id").unique(),
     numeroExibicao: text("numero_exibicao"),

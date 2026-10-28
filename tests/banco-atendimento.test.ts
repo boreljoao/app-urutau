@@ -172,7 +172,10 @@ describe("o agente responde", () => {
     // As duas mensagens seguidas do cliente viram um turno só, e o prompt fixo vai para o cache.
     const p = claude.chamadas[0];
     expect(p.messages).toEqual([{ role: "user", content: "Oi, tem pão de queijo?\nQuero 2, pago no pix" }]);
-    expect(p).toMatchObject({ model: "claude-opus-5-5", output_config: { effort: "low" }, fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
+    // O padrão é o Haiku, que não aceita `fallbacks` (a API devolveria 400).
+    expect(p).toMatchObject({ model: "claude-haiku-5-5", output_config: { effort: "low" } });
+    expect(p).not.toHaveProperty("fallbacks");
+    expect(p).not.toHaveProperty("betas");
     const sistema = p.system as { text: string; cache_control?: unknown }[];
     expect(sistema[0]).toMatchObject({ cache_control: { type: "ephemeral" } });
     expect(sistema[0].text).toContain("Café coado R$ 8");

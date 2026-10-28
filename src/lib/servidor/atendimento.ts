@@ -39,6 +39,14 @@ import { enfileirar } from "./tarefas";
 // ─── Dependências de fora (trocadas nos testes) ──────────────────────────────
 
 export type CriarMensagem = (p: MessageCreateParamsNonStreaming) => Promise<BetaMessage>;
+
+/**
+ * Se o modelo recusar por política, a API tenta o substituto padrão em vez de deixar o cliente sem
+ * resposta. O Haiku não tem substituto na API: mandar `fallbacks` para ele dá erro 400.
+ */
+export function comSubstituto(modelo: string): Pick<MessageCreateParamsNonStreaming, "fallbacks" | "betas"> {
+  return modelo.startsWith("claude-haiku") ? {} : { fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] };
+}
 export type EnviarWhatsapp = (conexao: { phoneNumberId: string; token: string }, para: string, texto: string) => Promise<string>;
 
 export interface Dependencias {
@@ -388,16 +396,15 @@ export async function responderConversa(db: BancoDeDados, conversaId: string, de
 
   try {
     for (let volta = 0; volta < MAX_VOLTAS; volta++) {
+      const modelo = agente.modelo || MODELO_PADRAO;
       const r = await criar({
-        model: agente.modelo || MODELO_PADRAO,
+        model: modelo,
         max_tokens: 4096,
         system,
         tools: FERRAMENTAS,
         messages: mensagens,
         output_config: { effort: "low" },
-        // Se o modelo recusar por política, a API tenta o substituto padrão em vez de deixar o cliente sem resposta.
-        fallbacks: "default",
-        betas: ["server-side-fallback-2026-07-01"],
+        ...comSubstituto(modelo),
       });
       uso.entrada += r.usage.input_tokens;
       uso.saida += r.usage.output_tokens;

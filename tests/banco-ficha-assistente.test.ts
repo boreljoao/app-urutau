@@ -26,7 +26,7 @@ function resposta(content: Bloco[], stop_reason: string): BetaMessage {
     id: `msg_${++seq}`,
     type: "message",
     role: "assistant",
-    model: "claude-sonnet-5-5",
+    model: "claude-haiku-5-5",
     content,
     stop_reason,
     stop_sequence: null,
@@ -148,7 +148,7 @@ describe("assistente da equipe", () => {
     expect(r.texto).toBe("- Ana quer atendente no WhatsApp, está quente.");
     expect(r.consultas).toEqual(["listar_conversas_do_site"]);
     expect(r.custoMicros).toBeGreaterThan(0);
-    expect(chamadas[0].model).toBe("claude-sonnet-5-5");
+    expect(chamadas[0]).toMatchObject({ model: "claude-sonnet-5-5", fallbacks: "default", betas: ["server-side-fallback-2026-07-01"] });
     const system = chamadas[0].system as { text: string; cache_control?: unknown }[];
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(system[1].text).toContain("Borel");
