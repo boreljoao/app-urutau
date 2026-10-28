@@ -1,0 +1,5 @@
+# Deploy pela CLI não leva as configurações locais (banco local, SITE_ORIGENS de dev).
+.env
+.env.*
+!.env.example
+.pg-teste
