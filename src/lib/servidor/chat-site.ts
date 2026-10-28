@@ -5,7 +5,7 @@ import { and, asc, count, desc, eq, gt, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { BancoDeDados } from "@/db";
 import { conversasSite, interacoes, leads, mensagensSite, usuarios, type StatusConversa } from "@/db/schema";
-import { MODELO_PADRAO, custoIaMicros, historicoParaClaude } from "@/lib/atendimento";
+import { custoIaMicros, historicoParaClaude } from "@/lib/atendimento";
 import { FRENTES_CHAT, LIMITES_CHAT, PROMPT_DO_SITE, equipeNoHorario, limiteDiarioDoChat } from "@/lib/chat-site";
 import { normalizarTelefone } from "@/lib/validacao";
 import { ErroAtendimento, criarPadrao, type CriarMensagem } from "./atendimento";
@@ -195,7 +195,9 @@ function contextoDoMomento(c: Conversa, agora: Date) {
     .join("\n");
 }
 
-const modeloDoChat = () => process.env.SITE_CHAT_MODELO || MODELO_PADRAO;
+/** O chat do site usa o Sonnet: inteligente o bastante para vender e metade do custo do Opus. */
+export const MODELO_DO_CHAT = "claude-sonnet-5-5";
+const modeloDoChat = () => process.env.SITE_CHAT_MODELO || MODELO_DO_CHAT;
 
 async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, agora: Date) {
   const recentes = await db
@@ -203,7 +205,7 @@ async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, 
     .from(mensagensSite)
     .where(eq(mensagensSite.conversaId, c.id))
     .orderBy(desc(mensagensSite.criadoEm))
-    .limit(60);
+    .limit(30);
   const historico = recentes.reverse().map((m) =>
     m.autor === "humano" ? { autor: "agente" as const, texto: `[resposta de alguém da equipe Urutau] ${m.texto}`, status: "enviada" } : { ...m, status: "enviada" },
   );
@@ -220,7 +222,7 @@ async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, 
   for (let volta = 0; volta < MAX_VOLTAS; volta++) {
     const r = await criar({
       model: modeloDoChat(),
-      max_tokens: 2048,
+      max_tokens: 1024,
       system,
       tools: FERRAMENTAS,
       messages: mensagens,

@@ -83,7 +83,7 @@ describe("chat do site", () => {
       ["agente", "Oi! Me conta um pouco do seu negócio?"],
     ]);
     const p = chamadas[0];
-    expect(p.model).toBe("claude-opus-5-5");
+    expect(p.model).toBe("claude-sonnet-5-5");
     expect(p.output_config).toEqual({ effort: "low" });
     const system = p.system as { text: string; cache_control?: unknown }[];
     expect(system[0].cache_control).toEqual({ type: "ephemeral" });
