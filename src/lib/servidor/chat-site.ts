@@ -79,14 +79,14 @@ const FERRAMENTAS: BetaTool[] = [
   {
     name: "anotar_visitante",
     description:
-      "Anota na ficha do visitante o que ele contou, para a equipe ler no painel. Chame junto com a resposta sempre que aprender algo novo; mande só os campos novos ou corrigidos.",
+      "Anota na ficha do visitante o que ele contou, para a equipe ler no painel. Chame junto com a resposta em todo turno em que a pessoa fizer uma pergunta ou contar algo que ainda não está na ficha; mande só os campos novos ou corrigidos.",
     input_schema: {
       type: "object",
       properties: {
         objetivo: { type: "string", description: "O que a pessoa quer, em uma frase curta." },
         negocio: { type: "string", description: "Ramo e tamanho do negócio." },
         usaHoje: { type: "string", description: "O que ela usa hoje (planilha, sistema, WhatsApp na mão…)." },
-        duvidas: { type: "array", items: { type: "string" }, description: "Perguntas novas que ela fez, uma por item." },
+        duvidas: { type: "array", items: { type: "string" }, description: "Cada pergunta nova que ela fez nesta mensagem, uma por item, como ela perguntou." },
         urgencia: { type: "string", enum: [...URGENCIAS], description: "agora = quer para já; este_mes = próximas semanas; pesquisando = sem pressa." },
         orcamento: { type: "string", description: "Quanto ela disse que pode investir, como falou." },
         temperatura: { type: "string", enum: [...TEMPERATURAS], description: "quente = quer fechar logo; morno = interessado; frio = só curiosidade." },
@@ -266,6 +266,8 @@ function contextoDoMomento(c: Conversa, agora: Date) {
     c.nome ? `Visitante: ${c.nome}${c.contato ? `, contato já salvo (${c.contato})` : ""}.` : "Visitante: nome ainda não informado.",
     c.resumo ? `Resumo: ${c.resumo}` : "",
     Object.keys(c.ficha).length ? `Ficha já anotada (não repita):\n${fichaEmTexto(c.ficha)}` : "Ficha ainda vazia.",
+    // O Haiku esquece de anotar da segunda mensagem em diante; o lembrete a cada turno resolve.
+    "Antes de responder: se a última mensagem da pessoa tem pergunta ou informação que não está na ficha acima, chame anotar_visitante junto com a resposta.",
   ]
     .filter(Boolean)
     .join("\n");
