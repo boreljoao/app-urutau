@@ -191,7 +191,7 @@ describe("chat do site", () => {
     expect(r.mensagens.map((m) => m.autor)).toEqual(["cliente"]);
     const [c] = await db.select().from(conversasSite).where(eq(conversasSite.chave, chave));
     const [sistema] = await db.select().from(mensagensSite).where(eq(mensagensSite.conversaId, c.id)).orderBy(mensagensSite.criadoEm).offset(1);
-    expect(sistema.texto).toBe("O agente não respondeu: Claude: chave da API inválida (ANTHROPIC_API_KEY).");
+    expect(sistema.texto).toMatch(/^O agente não respondeu: Claude: chave da API inválida \(ANTHROPIC_API_KEY\): chave com \d+ caracteres/);
     expect((await resumoDoChat(db)).falhas7d).toBe(1);
   });
 

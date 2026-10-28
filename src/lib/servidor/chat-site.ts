@@ -8,7 +8,7 @@ import { conversasSite, interacoes, leads, mensagensSite, usuarios, type StatusC
 import { custoIaMicros, historicoParaClaude } from "@/lib/atendimento";
 import { FRENTES_CHAT, LIMITES_CHAT, PROMPT_DO_SITE, equipeNoHorario, limiteDiarioDoChat } from "@/lib/chat-site";
 import { normalizarTelefone } from "@/lib/validacao";
-import { ErroAtendimento, criarPadrao, type CriarMensagem } from "./atendimento";
+import { ErroAtendimento, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
 import { leadDoSite } from "./comercial";
 
 /**
@@ -267,7 +267,7 @@ async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, 
 
 function descreverErro(e: unknown) {
   if (e instanceof ErroAtendimento) return e.message;
-  if (e instanceof Anthropic.AuthenticationError) return "Claude: chave da API inválida (ANTHROPIC_API_KEY).";
+  if (e instanceof Anthropic.AuthenticationError) return `Claude: chave da API inválida (ANTHROPIC_API_KEY): ${formatoDaChave()}.`;
   if (e instanceof Anthropic.RateLimitError) return "Claude: limite de uso atingido.";
   if (e instanceof Anthropic.APIError) return `Claude: ${e.status ?? ""} ${e.message}`.trim();
   return e instanceof Error ? e.message : String(e);

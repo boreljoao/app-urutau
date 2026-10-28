@@ -49,10 +49,27 @@ export interface Dependencias {
 
 let clienteClaude: Anthropic | null = null;
 
+/** A chave como foi colada na Vercel, sem espaços, quebras de linha, aspas ou "ANTHROPIC_API_KEY=" na frente. */
+export function chaveDaApi(bruta = process.env.ANTHROPIC_API_KEY ?? "") {
+  return bruta.trim().replace(/^ANTHROPIC_API_KEY\s*=\s*/, "").replace(/^["']|["']$/g, "").trim();
+}
+
+/** Diz o que há de errado no formato da chave sem mostrar a chave (vai para o log quando a API recusa). */
+export function formatoDaChave(bruta = process.env.ANTHROPIC_API_KEY ?? "") {
+  const k = chaveDaApi(bruta);
+  const avisos = [
+    !k.startsWith("sk-ant-api") && `começa com "${k.slice(0, 10)}" e não com "sk-ant-api" (crie em console.anthropic.com → API Keys)`,
+    k !== bruta && "tinha espaços, aspas ou o nome da variável junto (já ignorados)",
+    /\s/.test(k) && "tem espaço ou quebra de linha no meio",
+  ].filter(Boolean);
+  return `chave com ${k.length} caracteres${avisos.length ? `; ${avisos.join("; ")}` : "; formato certo, então ela foi apagada, é de outra conta ou ainda não vale"}`;
+}
+
 /** Chama o Claude de verdade (o chat do site usa o mesmo cliente). */
 export const criarPadrao: CriarMensagem = (p) => {
-  if (!process.env.ANTHROPIC_API_KEY) throw new ErroAtendimento("A IA ainda não foi ligada neste ambiente (falta a ANTHROPIC_API_KEY). Avise a equipe Urutau.");
-  clienteClaude ??= new Anthropic({ maxRetries: 2, timeout: 60_000 });
+  const apiKey = chaveDaApi();
+  if (!apiKey) throw new ErroAtendimento("A IA ainda não foi ligada neste ambiente (falta a ANTHROPIC_API_KEY). Avise a equipe Urutau.");
+  clienteClaude ??= new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
   return clienteClaude.beta.messages.create(p);
 };
 
@@ -409,7 +426,7 @@ export async function responderConversa(db: BancoDeDados, conversaId: string, de
   } catch (e) {
     const msg =
       e instanceof Anthropic.AuthenticationError
-        ? "Claude: chave da API inválida (ANTHROPIC_API_KEY)."
+        ? `Claude: chave da API inválida (ANTHROPIC_API_KEY): ${formatoDaChave()}.`
         : e instanceof Anthropic.RateLimitError
           ? "Claude: limite de uso atingido, tentando de novo."
           : e instanceof Anthropic.APIError
