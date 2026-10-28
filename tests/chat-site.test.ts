@@ -50,3 +50,26 @@ describe("chat do site", () => {
     ]);
   });
 });
+
+describe("ficha do visitante", () => {
+  it("junta a ficha: texto novo substitui, dúvidas somam sem repetir", async () => {
+    const { juntarFicha } = await import("@/lib/chat-site");
+    const a = juntarFicha({ objetivo: "site", duvidas: ["Quanto custa?"] }, { objetivo: "site com agenda", duvidas: ["quanto custa?", "Faz SEO?"], orcamento: "" });
+    expect(a).toEqual({ objetivo: "site com agenda", duvidas: ["Quanto custa?", "Faz SEO?"] });
+  });
+
+  it("monta a mensagem do WhatsApp com o que o visitante contou", async () => {
+    const { textoParaWhatsapp } = await import("@/lib/chat-site");
+    expect(textoParaWhatsapp({ nome: "Ana", resumo: null, ficha: { objetivo: "atendente no WhatsApp.", negocio: "salão", duvidas: ["Integra com a agenda?"] } })).toBe(
+      "Oi, Urutau! Sou Ana e vim do chat do site. Procuro: atendente no WhatsApp. Meu negócio: salão. Dúvida: Integra com a agenda?",
+    );
+    expect(textoParaWhatsapp({ nome: null, resumo: null, ficha: {} })).toBe("Oi, Urutau! Vim do chat do site.");
+  });
+
+  it("o prompt manda anotar a ficha e explica redes sociais", async () => {
+    const { PROMPT_DO_SITE, SOBRE_A_URUTAU } = await import("@/lib/chat-site");
+    expect(PROMPT_DO_SITE).toContain("anotar_visitante");
+    expect(PROMPT_DO_SITE).toContain(SOBRE_A_URUTAU);
+    expect(SOBRE_A_URUTAU).toContain("Redes sociais");
+  });
+});

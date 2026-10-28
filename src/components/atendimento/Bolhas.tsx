@@ -14,7 +14,7 @@ export interface MensagemNaTela {
 const hora = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 const dia = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", day: "numeric", month: "long" });
 
-const ICONE_ACAO: Record<string, string> = { anotar_atendimento: "✎", salvar_cliente: "☺", registrar_venda: "$", chamar_humano: "☎", salvar_contato: "☺", chamar_equipe: "☎" };
+const ICONE_ACAO: Record<string, string> = { anotar_atendimento: "✎", salvar_cliente: "☺", registrar_venda: "$", chamar_humano: "☎", salvar_contato: "☺", chamar_equipe: "☎", anotar_visitante: "✎" };
 
 function Tique({ status }: { status: string }) {
   if (status === "falhou") return <span className="font-bold text-negativo" title="Não foi entregue">!</span>;

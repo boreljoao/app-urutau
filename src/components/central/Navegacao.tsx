@@ -9,6 +9,7 @@ const LINKS: { href: string; rotulo: string; exato?: boolean; tambem?: string[];
   { href: "/admin/clientes", rotulo: "Clientes", tambem: ["/admin/empresas"] },
   { href: "/admin/comercial", rotulo: "Comercial" },
   { href: "/admin/atendimento", rotulo: "Atendimento" },
+  { href: "/admin/assistente", rotulo: "Assistente" },
   { href: "/admin/receita", rotulo: "Receita", soSocio: true },
   { href: "/admin/ganhos", rotulo: "Meus ganhos" },
 ];

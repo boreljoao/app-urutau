@@ -1,0 +1,1 @@
+ALTER TABLE "conversas_site" ADD COLUMN "ficha" jsonb DEFAULT '{}'::jsonb NOT NULL;

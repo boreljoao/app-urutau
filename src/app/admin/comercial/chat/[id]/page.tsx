@@ -6,6 +6,8 @@ import { Bolhas } from "@/components/atendimento/Bolhas";
 import { Responder, RolarParaFim } from "@/components/atendimento/Chat";
 import { obterDb } from "@/db";
 import { usdParaReais } from "@/lib/atendimento";
+import { Temperatura } from "@/components/central/Temperatura";
+import { NOME_URGENCIA } from "@/lib/chat-site";
 import { NOME_SERVICO } from "@/lib/comercial";
 import { exigirSuperadmin } from "@/lib/servidor/acesso";
 import { mudarStatusDoSiteAcao, responderNoSiteAcao } from "@/lib/servidor/acoes-chat-site";
@@ -58,6 +60,45 @@ export default async function ConversaDoSite({ params }: { params: Promise<{ id:
 
       <section className="cartao space-y-1.5 !py-3 text-sm" aria-label="Resumo">
         {c.resumo && <p>{c.resumo}</p>}
+        {Object.keys(c.ficha).length > 0 && (
+          <dl className="grid gap-x-4 gap-y-1.5 pt-1 sm:grid-cols-[auto_1fr]">
+            {(
+              [
+                ["Quer", c.ficha.objetivo],
+                ["Negócio", c.ficha.negocio],
+                ["Usa hoje", c.ficha.usaHoje],
+                ["Urgência", c.ficha.urgencia && NOME_URGENCIA[c.ficha.urgencia]],
+                ["Orçamento", c.ficha.orcamento],
+                ["Próximo passo", c.ficha.proximoPasso],
+              ] as const
+            )
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt className="text-[12px] text-meta sm:pt-0.5">{k}</dt>
+                  <dd>{v}</dd>
+                </div>
+              ))}
+            {c.ficha.temperatura && (
+              <div className="contents">
+                <dt className="text-[12px] text-meta sm:pt-0.5">Temperatura</dt>
+                <dd>
+                  <Temperatura t={c.ficha.temperatura} />
+                </dd>
+              </div>
+            )}
+            {(c.ficha.duvidas?.length ?? 0) > 0 && (
+              <div className="contents">
+                <dt className="text-[12px] text-meta sm:pt-0.5">Dúvidas</dt>
+                <dd>
+                  <ul className="list-disc space-y-0.5 pl-4">
+                    {c.ficha.duvidas?.map((d) => <li key={d}>{d}</li>)}
+                  </ul>
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
         {c.interesses.length > 0 && (
           <p className="flex flex-wrap gap-1">
             {c.interesses.map((i) => (

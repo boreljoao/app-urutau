@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { FichaVisitante } from "../lib/chat-site";
 import {
   type AnyPgColumn,
   bigint,
@@ -1258,6 +1259,8 @@ export const conversasSite = pgTable(
     /** Frentes que interessam: atende, flow, financas, gestao, sites, ads. */
     interesses: text("interesses").array().notNull().default(sql`'{}'::text[]`),
     resumo: text("resumo"),
+    /** O que o agente anotou do visitante: o que quer, dúvidas, urgência, orçamento… (ver FichaVisitante). */
+    ficha: jsonb("ficha").$type<FichaVisitante>().notNull().default({}),
     motivoHumano: text("motivo_humano"),
     /** Onde o chat foi aberto pela primeira vez. */
     pagina: text("pagina"),

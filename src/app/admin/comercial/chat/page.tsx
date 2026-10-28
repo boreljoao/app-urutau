@@ -7,7 +7,9 @@ import { obterDb } from "@/db";
 import { usdParaReais } from "@/lib/atendimento";
 import { quando } from "@/lib/central";
 import { NOME_SERVICO } from "@/lib/comercial";
-import { listarConversasDoSite, resumoDoChat, type FiltroChat } from "@/lib/servidor/chat-site";
+import { Temperatura } from "@/components/central/Temperatura";
+import { NOME_URGENCIA, type Urgencia } from "@/lib/chat-site";
+import { listarConversasDoSite, oQueOsVisitantesQuerem, resumoDoChat, type FiltroChat } from "@/lib/servidor/chat-site";
 import { formatarTelefone } from "@/lib/validacao";
 
 export const metadata = { title: "Chat do site" };
@@ -16,6 +18,7 @@ export const dynamic = "force-dynamic";
 const FILTROS: { id: FiltroChat; rotulo: string }[] = [
   { id: "abertas", rotulo: "Abertas" },
   { id: "equipe", rotulo: "Esperando a equipe" },
+  { id: "quentes", rotulo: "Quentes" },
   { id: "contato", rotulo: "Deixaram contato" },
   { id: "todas", rotulo: "Todas" },
 ];
@@ -35,7 +38,8 @@ export default async function ChatDoSite({ searchParams }: { searchParams: Promi
   const filtro = FILTROS.some((x) => x.id === f) ? (f as FiltroChat) : "abertas";
   const db = obterDb();
   const agora = new Date();
-  const [r, lista] = await Promise.all([resumoDoChat(db, agora), listarConversasDoSite(db, filtro)]);
+  const [r, lista, querem] = await Promise.all([resumoDoChat(db, agora), listarConversasDoSite(db, filtro), oQueOsVisitantesQuerem(db, agora)]);
+  const maiorFrente = Math.max(1, ...querem.frentes.map((f) => f.n));
   const conversao = r.conversas30d ? `${Math.round((r.contatos30d / r.conversas30d) * 100)}% das conversas` : "sem conversas";
 
   return (
@@ -74,6 +78,66 @@ export default async function ChatDoSite({ searchParams }: { searchParams: Promi
         </dl>
       </section>
 
+      <section className="cartao" aria-labelledby="t-querem">
+        <TituloBloco>
+          <span id="t-querem">O que os visitantes querem</span>
+          <span className="ml-2 text-[12px] font-normal text-meta">últimos {querem.dias} dias, anotado pelo agente</span>
+        </TituloBloco>
+        {querem.frentes.length === 0 && querem.objetivos.length === 0 ? (
+          <Vazio>Assim que alguém conversar com o urutau, aparece aqui o que as pessoas procuram e o que perguntam.</Vazio>
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-3">
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-suave">Frentes procuradas</h3>
+              <ul className="space-y-1.5">
+                {querem.frentes.map((f) => (
+                  <li key={f.frente} className="text-sm">
+                    <div className="flex justify-between gap-2">
+                      <span>{NOME_SERVICO[f.frente] ?? f.frente}</span>
+                      <span className="numero text-suave">{f.n}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 rounded-full bg-superficie-2">
+                      <div className="h-1.5 rounded-full bg-destaque" style={{ width: `${(f.n / maiorFrente) * 100}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="pt-1 text-[12px] text-meta">
+                {(["quente", "morno", "frio"] as const).map((t) => `${querem.temperaturas[t] ?? 0} ${t}`).join(" · ")}
+                {" · "}
+                {(Object.keys(NOME_URGENCIA) as Urgencia[]).map((u) => `${querem.urgencias[u] ?? 0} ${NOME_URGENCIA[u]}`).join(" · ")}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-suave">O que pediram</h3>
+              <ul className="space-y-1.5 text-sm">
+                {querem.objetivos.map((o, i) => (
+                  <li key={`${o.conversaId}-${i}`}>
+                    <Link href={`/admin/comercial/chat/${o.conversaId}`} className="hover:underline">
+                      {o.texto}
+                    </Link>{" "}
+                    <span className="text-[12px] text-meta">{o.nome ?? "visitante"}</span> <Temperatura t={o.temperatura} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-[13px] font-semibold text-suave">Dúvidas que fizeram</h3>
+              <ul className="space-y-1.5 text-sm">
+                {querem.duvidas.map((d, i) => (
+                  <li key={`${d.conversaId}-${i}`}>
+                    <Link href={`/admin/comercial/chat/${d.conversaId}`} className="hover:underline">
+                      “{d.texto}”
+                    </Link>{" "}
+                    <span className="text-[12px] text-meta">{d.nome ?? "visitante"}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="cartao" aria-labelledby="t-conversas">
         <TituloBloco
           acao={
@@ -110,10 +174,16 @@ export default async function ChatDoSite({ searchParams }: { searchParams: Promi
                         <span className="font-semibold">{c.nome ?? "Visitante sem nome"}</span>
                         {c.contato && <span className="text-[13px] text-suave">{mostrarContato(c.contato)}</span>}
                         <span className="text-[12px] text-meta">{s.rotulo}</span>
+                        <Temperatura t={c.ficha.temperatura} />
                       </p>
                       <p className="mt-0.5 truncate text-[14px] text-suave">
-                        {c.status === "humano" && c.motivoHumano ? `Chamou a equipe: ${c.motivoHumano}` : (c.resumo ?? c.ultimaMensagem ?? "")}
+                        {c.status === "humano" && c.motivoHumano
+                          ? `Chamou a equipe: ${c.motivoHumano}`
+                          : (c.ficha.objetivo ?? c.resumo ?? c.ultimaMensagem ?? "")}
                       </p>
+                      {(c.ficha.duvidas?.length ?? 0) > 0 && (
+                        <p className="mt-0.5 truncate text-[13px] text-meta">Perguntou: {c.ficha.duvidas?.at(-1)}</p>
+                      )}
                       {c.interesses.length > 0 && (
                         <p className="mt-1 flex flex-wrap gap-1">
                           {c.interesses.map((i) => (

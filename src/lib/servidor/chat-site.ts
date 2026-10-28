@@ -6,7 +6,18 @@ import { z } from "zod";
 import type { BancoDeDados } from "@/db";
 import { conversasSite, interacoes, leads, mensagensSite, usuarios, type StatusConversa } from "@/db/schema";
 import { custoIaMicros, historicoParaClaude } from "@/lib/atendimento";
-import { FRENTES_CHAT, LIMITES_CHAT, PROMPT_DO_SITE, equipeNoHorario, limiteDiarioDoChat } from "@/lib/chat-site";
+import {
+  FRENTES_CHAT,
+  LIMITES_CHAT,
+  PROMPT_DO_SITE,
+  TEMPERATURAS,
+  URGENCIAS,
+  equipeNoHorario,
+  juntarFicha,
+  limiteDiarioDoChat,
+  textoParaWhatsapp,
+  type FichaVisitante,
+} from "@/lib/chat-site";
 import { normalizarTelefone } from "@/lib/validacao";
 import { ErroAtendimento, criarPadrao, formatoDaChave, type CriarMensagem } from "./atendimento";
 import { leadDoSite } from "./comercial";
@@ -40,6 +51,8 @@ export interface RespostaDoChat {
   mensagens: MensagemVisivel[];
   /** Texto para mostrar no chat quando o agente não respondeu. */
   aviso?: string;
+  /** A mensagem que já vai escrita no botão "Continuar no WhatsApp", com o que o visitante contou. */
+  whatsapp?: string;
 }
 
 const WHATSAPP = "(21) 99368-9481";
@@ -63,6 +76,25 @@ const visivel = (m: { id: string; autor: string; texto: string; criadoEm: Date }
 const MAX_VOLTAS = 4;
 
 const FERRAMENTAS: BetaTool[] = [
+  {
+    name: "anotar_visitante",
+    description:
+      "Anota na ficha do visitante o que ele contou, para a equipe ler no painel. Chame junto com a resposta sempre que aprender algo novo; mande só os campos novos ou corrigidos.",
+    input_schema: {
+      type: "object",
+      properties: {
+        objetivo: { type: "string", description: "O que a pessoa quer, em uma frase curta." },
+        negocio: { type: "string", description: "Ramo e tamanho do negócio." },
+        usaHoje: { type: "string", description: "O que ela usa hoje (planilha, sistema, WhatsApp na mão…)." },
+        duvidas: { type: "array", items: { type: "string" }, description: "Perguntas novas que ela fez, uma por item." },
+        urgencia: { type: "string", enum: [...URGENCIAS], description: "agora = quer para já; este_mes = próximas semanas; pesquisando = sem pressa." },
+        orcamento: { type: "string", description: "Quanto ela disse que pode investir, como falou." },
+        temperatura: { type: "string", enum: [...TEMPERATURAS], description: "quente = quer fechar logo; morno = interessado; frio = só curiosidade." },
+        interesses: { type: "array", items: { type: "string", enum: FRENTES_CHAT }, description: "Frentes da Urutau que resolvem o caso." },
+        proximoPasso: { type: "string", description: "O que a equipe deve fazer a seguir." },
+      },
+    },
+  },
   {
     name: "salvar_contato",
     description:
@@ -102,6 +134,17 @@ const entradas = {
     resumo: z.string().trim().max(600).optional(),
   }),
   chamar_equipe: z.object({ motivo: z.string().trim().min(1).max(300) }),
+  anotar_visitante: z.object({
+    objetivo: z.string().trim().max(300).optional().catch(undefined),
+    negocio: z.string().trim().max(200).optional().catch(undefined),
+    usaHoje: z.string().trim().max(200).optional().catch(undefined),
+    duvidas: z.array(z.string().trim().min(1).max(300)).max(8).optional().catch(undefined),
+    urgencia: z.enum(URGENCIAS).optional().catch(undefined),
+    orcamento: z.string().trim().max(120).optional().catch(undefined),
+    temperatura: z.enum(TEMPERATURAS).optional().catch(undefined),
+    interesses: z.array(z.enum(FRENTES_CHAT as [string, ...string[]])).max(6).optional().catch(undefined),
+    proximoPasso: z.string().trim().max(300).optional().catch(undefined),
+  }),
 };
 
 interface ResultadoFerramenta {
@@ -111,6 +154,37 @@ interface ResultadoFerramenta {
 }
 
 const juntar = (a: string[], b: string[] = []) => [...new Set([...a, ...b])];
+
+async function anotarVisitante(db: BancoDeDados, c: Conversa, input: unknown): Promise<ResultadoFerramenta> {
+  const p = entradas.anotar_visitante.safeParse(input ?? {});
+  if (!p.success) return { resumo: "ficha inválida", resultado: "Nada anotado: campos inválidos.", erro: true };
+  const { interesses, ...nova } = p.data;
+  const ficha = juntarFicha(c.ficha, nova);
+  await db
+    .update(conversasSite)
+    .set({ ficha, interesses: juntar(c.interesses, interesses), ...(!c.resumo && ficha.objetivo ? { resumo: ficha.objetivo } : {}) })
+    .where(eq(conversasSite.id, c.id));
+  const anotado = [nova.objetivo && "objetivo", nova.negocio && "negócio", nova.duvidas?.length && "dúvida", nova.urgencia && "urgência", nova.orcamento && "orçamento", nova.temperatura && nova.temperatura]
+    .filter(Boolean)
+    .join(", ");
+  return { resumo: `Anotou: ${anotado || "ficha"}`, resultado: "Anotado." };
+}
+
+/** A ficha em texto, para a nota do lead e para o assistente da equipe. */
+export function fichaEmTexto(f: FichaVisitante) {
+  return [
+    f.objetivo && `Quer: ${f.objetivo}`,
+    f.negocio && `Negócio: ${f.negocio}`,
+    f.usaHoje && `Usa hoje: ${f.usaHoje}`,
+    f.urgencia && `Urgência: ${f.urgencia}`,
+    f.orcamento && `Orçamento: ${f.orcamento}`,
+    f.temperatura && `Temperatura: ${f.temperatura}`,
+    f.duvidas?.length && `Dúvidas: ${f.duvidas.join(" | ")}`,
+    f.proximoPasso && `Próximo passo: ${f.proximoPasso}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 async function salvarContato(db: BancoDeDados, c: Conversa, input: unknown): Promise<ResultadoFerramenta> {
   const p = entradas.salvar_contato.safeParse(input);
@@ -143,7 +217,7 @@ async function salvarContato(db: BancoDeDados, c: Conversa, input: unknown): Pro
       negocio: d.negocio ?? null,
       telefone,
       email: telefone ? null : email,
-      mensagem: `Pelo chat do site: ${d.resumo ?? "deixou contato."}`,
+      mensagem: [`Pelo chat do site: ${d.resumo ?? "deixou contato."}`, fichaEmTexto(c.ficha)].filter(Boolean).join("\n"),
       dores: [],
       tamanho: null,
       pagina: c.pagina,
@@ -172,6 +246,7 @@ async function passarParaEquipe(db: BancoDeDados, c: Conversa, motivo: string) {
 }
 
 async function executarFerramenta(db: BancoDeDados, c: Conversa, nome: string, input: unknown): Promise<ResultadoFerramenta> {
+  if (nome === "anotar_visitante") return anotarVisitante(db, c, input);
   if (nome === "salvar_contato") return salvarContato(db, c, input);
   if (nome === "chamar_equipe") {
     const p = entradas.chamar_equipe.safeParse(input);
@@ -189,7 +264,8 @@ function contextoDoMomento(c: Conversa, agora: Date) {
   return [
     `Agora: ${formatoAgora.format(agora)} (horário de Brasília). ${equipeNoHorario(agora) ? "A equipe está no horário." : "A equipe está fora do horário."}`,
     c.nome ? `Visitante: ${c.nome}${c.contato ? `, contato já salvo (${c.contato})` : ""}.` : "Visitante: nome ainda não informado.",
-    c.resumo ? `Já anotado: ${c.resumo}` : "",
+    c.resumo ? `Resumo: ${c.resumo}` : "",
+    Object.keys(c.ficha).length ? `Ficha já anotada (não repita):\n${fichaEmTexto(c.ficha)}` : "Ficha ainda vazia.",
   ]
     .filter(Boolean)
     .join("\n");
@@ -254,6 +330,8 @@ async function rodarAgente(db: BancoDeDados, c: Conversa, criar: CriarMensagem, 
       resultados.push({ type: "tool_result", tool_use_id: u.id, content: res.resultado, ...(res.erro ? { is_error: true } : {}) });
     }
     mensagens.push({ role: "user", content: resultados });
+    // Só anotou e a resposta já está escrita: não precisa de outra volta (economiza uma chamada).
+    if (texto && usos.every((u) => u.name === "anotar_visitante")) break;
   }
 
   if (recusou) {
@@ -341,8 +419,9 @@ export async function conversarNoSite(db: BancoDeDados, e: EntradaDoChat, deps: 
     return { estado: "indisponivel", status: c.status, mensagens, aviso: AVISOS.indisponivel };
   }
 
-  const [atual] = await db.select({ status: conversasSite.status }).from(conversasSite).where(eq(conversasSite.id, c.id));
-  if (!resposta.texto) return { estado: atual.status === "humano" ? "equipe" : "ok", status: atual.status, mensagens };
+  const [atual] = await db.select().from(conversasSite).where(eq(conversasSite.id, c.id));
+  const whatsapp = textoParaWhatsapp(atual);
+  if (!resposta.texto) return { estado: atual.status === "humano" ? "equipe" : "ok", status: atual.status, mensagens, whatsapp };
   const fim = deps.agora?.() ?? new Date();
   const [doAgente] = await db
     .insert(mensagensSite)
@@ -361,12 +440,12 @@ export async function conversarNoSite(db: BancoDeDados, e: EntradaDoChat, deps: 
     })
     .returning();
   await db.update(conversasSite).set({ ultimaMensagemEm: doAgente.criadoEm }).where(eq(conversasSite.id, c.id));
-  return { estado: atual.status === "humano" ? "equipe" : "ok", status: atual.status, mensagens: [...mensagens, visivel(doAgente)] };
+  return { estado: atual.status === "humano" ? "equipe" : "ok", status: atual.status, mensagens: [...mensagens, visivel(doAgente)], whatsapp };
 }
 
 /** Para o chat buscar o que chegou (resposta da equipe) e para retomar a conversa ao recarregar. */
 export async function lerConversaDoSite(db: BancoDeDados, chave: string, depois?: Date | null) {
-  const [c] = await db.select({ id: conversasSite.id, status: conversasSite.status }).from(conversasSite).where(eq(conversasSite.chave, chave));
+  const [c] = await db.select().from(conversasSite).where(eq(conversasSite.chave, chave));
   if (!c) return null;
   const lista = await db
     .select({ id: mensagensSite.id, autor: mensagensSite.autor, texto: mensagensSite.texto, criadoEm: mensagensSite.criadoEm })
@@ -374,7 +453,7 @@ export async function lerConversaDoSite(db: BancoDeDados, chave: string, depois?
     .where(and(eq(mensagensSite.conversaId, c.id), ne(mensagensSite.autor, "sistema"), depois ? gt(mensagensSite.criadoEm, depois) : undefined))
     .orderBy(asc(mensagensSite.criadoEm))
     .limit(80);
-  return { status: c.status, mensagens: lista.map(visivel) };
+  return { status: c.status, mensagens: lista.map(visivel), whatsapp: textoParaWhatsapp(c) };
 }
 
 // ─── A equipe, pela Central ──────────────────────────────────────────────────
@@ -407,7 +486,7 @@ export async function marcarSiteLida(db: BancoDeDados, conversaId: string) {
   await db.update(conversasSite).set({ naoLidas: 0 }).where(eq(conversasSite.id, conversaId));
 }
 
-export type FiltroChat = "abertas" | "equipe" | "contato" | "todas";
+export type FiltroChat = "abertas" | "equipe" | "quentes" | "contato" | "todas";
 
 export async function listarConversasDoSite(db: BancoDeDados, filtro: FiltroChat = "abertas", limite = 80) {
   const onde =
@@ -415,9 +494,11 @@ export async function listarConversasDoSite(db: BancoDeDados, filtro: FiltroChat
       ? ne(conversasSite.status, "encerrada")
       : filtro === "equipe"
         ? eq(conversasSite.status, "humano")
-        : filtro === "contato"
-          ? isNotNull(conversasSite.leadId)
-          : undefined;
+        : filtro === "quentes"
+          ? sql`${conversasSite.ficha}->>'temperatura' = 'quente'`
+          : filtro === "contato"
+            ? isNotNull(conversasSite.leadId)
+            : undefined;
   return db
     .select({
       id: conversasSite.id,
@@ -425,6 +506,7 @@ export async function listarConversasDoSite(db: BancoDeDados, filtro: FiltroChat
       contato: conversasSite.contato,
       status: conversasSite.status,
       resumo: conversasSite.resumo,
+      ficha: conversasSite.ficha,
       interesses: conversasSite.interesses,
       motivoHumano: conversasSite.motivoHumano,
       leadId: conversasSite.leadId,
@@ -491,4 +573,43 @@ export async function resumoDoChat(db: BancoDeDados, agora = new Date()) {
     })
     .from(mensagensSite);
   return { ...conversas, ...respostas, limiteDiario: limiteDiarioDoChat() };
+}
+
+/** O que os visitantes do site querem: frentes, urgência, temperatura e as dúvidas mais recentes. */
+export async function oQueOsVisitantesQuerem(db: BancoDeDados, agora = new Date(), dias = 30) {
+  const desde = new Date(agora.getTime() - dias * 24 * 3600_000);
+  const recentes = gt(conversasSite.criadoEm, desde);
+  const [frentes, urgencias, temperaturas, fichas] = await Promise.all([
+    db
+      .select({ frente: sql<string>`unnest(${conversasSite.interesses})`.as("frente"), n: count() })
+      .from(conversasSite)
+      .where(recentes)
+      .groupBy(sql`1`)
+      .orderBy(desc(count())),
+    db
+      .select({ valor: sql<string | null>`${conversasSite.ficha}->>'urgencia'`, n: count() })
+      .from(conversasSite)
+      .where(and(recentes, sql`${conversasSite.ficha}->>'urgencia' is not null`))
+      .groupBy(sql`1`),
+    db
+      .select({ valor: sql<string | null>`${conversasSite.ficha}->>'temperatura'`, n: count() })
+      .from(conversasSite)
+      .where(and(recentes, sql`${conversasSite.ficha}->>'temperatura' is not null`))
+      .groupBy(sql`1`),
+    db
+      .select({ id: conversasSite.id, nome: conversasSite.nome, ficha: conversasSite.ficha, criadoEm: conversasSite.criadoEm })
+      .from(conversasSite)
+      .where(and(recentes, sql`${conversasSite.ficha} <> '{}'::jsonb`))
+      .orderBy(desc(conversasSite.ultimaMensagemEm))
+      .limit(40),
+  ]);
+  const contagem = (l: { valor: string | null; n: number }[]) => Object.fromEntries(l.filter((x) => x.valor).map((x) => [x.valor as string, x.n]));
+  return {
+    dias,
+    frentes: frentes.map((f) => ({ frente: f.frente, n: f.n })),
+    urgencias: contagem(urgencias),
+    temperaturas: contagem(temperaturas),
+    duvidas: fichas.flatMap((f) => (f.ficha.duvidas ?? []).map((texto) => ({ conversaId: f.id, nome: f.nome, texto }))).slice(0, 12),
+    objetivos: fichas.filter((f) => f.ficha.objetivo).map((f) => ({ conversaId: f.id, nome: f.nome, texto: f.ficha.objetivo as string, temperatura: f.ficha.temperatura })).slice(0, 12),
+  };
 }
