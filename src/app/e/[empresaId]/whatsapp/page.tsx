@@ -60,6 +60,7 @@ export default async function Atendimento({
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
+          <Link href={`${base}/apresentar`} className="btn-principal !min-h-10 !px-3 text-sm">Apresentar</Link>
           <Link href={`${base}/testar`} className="btn-secundario !min-h-10 !px-3 text-sm">Testar</Link>
           {pode(ctx.papel, "gerenciar") && <Link href={`${base}/agente`} className="btn-secundario !min-h-10 !px-3 text-sm">Ajustar</Link>}
         </div>

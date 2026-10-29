@@ -94,9 +94,11 @@ export async function simularAcao(empresaId: string, _: EstadoForm, fd: FormData
     await simularMensagem(obterDb(), empresaId, ctx.usuario.id, texto.slice(0, 2000));
   } catch (e) {
     revalidatePath(`${caminho(empresaId)}/testar`);
+    revalidatePath(`${caminho(empresaId)}/apresentar`);
     return { erros: { _: mensagemDeErro(e) } };
   }
   revalidatePath(`${caminho(empresaId)}/testar`);
+  revalidatePath(`${caminho(empresaId)}/apresentar`);
   return { ok: "Respondida." };
 }
 
@@ -104,6 +106,7 @@ export async function limparSimuladorAcao(empresaId: string) {
   const ctx = await exigirWhatsapp(empresaId, "lancar");
   await limparSimulador(obterDb(), empresaId, ctx.usuario.id);
   revalidatePath(`${caminho(empresaId)}/testar`);
+  revalidatePath(`${caminho(empresaId)}/apresentar`);
 }
 
 // ─── Configuração do agente ──────────────────────────────────────────────────
