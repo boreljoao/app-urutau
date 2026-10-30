@@ -124,27 +124,30 @@ export const DEMONSTRACOES: Record<Ramo, Demonstracao> = {
       conhecimento: `AVENIDA SEMINOVOS
 Seminovos revisados, com laudo cautelar e garantia de 3 meses no motor e câmbio. Av. Feliciano Sodré, 820, Centro, Niterói.
 
-CARROS DISPONÍVEIS
-- Jeep Compass Longitude 2020, automático, 58 mil km, cinza: R$ 112.900
-- Hyundai Creta Platinum 2022, automático, 39 mil km, branco: R$ 118.500
-- Volkswagen T-Cross Highline 2021, automático, 52 mil km, prata: R$ 104.900
-- Toyota Corolla XEi 2020, automático, 61 mil km, preto: R$ 109.900
-- Chevrolet Onix LT 1.0 turbo 2021, manual, 48 mil km, vermelho: R$ 72.900
-- Hyundai HB20 Comfort 2020, manual, 61 mil km, branco: R$ 64.500
-- Fiat Toro Volcano diesel 2021, 4x4, 74 mil km, cinza: R$ 139.900
-- Honda CG 160 Titan 2023, 9 mil km, preta: R$ 16.900
+CARROS DISPONÍVEIS (preço final, documentação inclusa)
+- Jeep Compass Longitude 2020, automático, 58 mil km, prata: R$ 112.900
+- Toyota Corolla XEi 2.0 2020, automático, 61 mil km, branco: R$ 109.900
+- Volkswagen T-Cross Highline 2021, automático, 52 mil km, cinza: R$ 104.900
+- Fiat Toro Volcano diesel 4x4 2021, automática, 74 mil km, branca: R$ 139.900
+- Hyundai HB20 Comfort Plus turbo 2024, automático, 18 mil km, prata: R$ 94.900
+- Hyundai Creta Prestige 2.0 2019, automático, 64 mil km, bronze: R$ 89.900
+- Hyundai HB20 Comfort 1.0 2020, manual, 61 mil km, branco: R$ 64.500
+- Chevrolet Onix LT 1.0 2019, manual, 66 mil km, branco: R$ 62.900
 
 FINANCIAMENTO
-Entrada a partir de 20%, em até 60x, com os principais bancos. Para simular precisa de nome completo e CPF: chame alguém da loja.
+Entrada a partir de 20%, em até 60x, com os principais bancos. O carro usado pode ser a entrada. O site tem um simulador com taxa de 1,69% ao mês (estimativa). Para aprovar com o banco precisa de nome completo e CPF: chame alguém da loja.
+
+RESERVA
+Sinal de R$ 2.000 no Pix segura o carro por até 3 dias e entra no valor do carro.
 
 TROCA
-Aceitamos carro e moto na troca. A avaliação é presencial, leva uns 20 minutos.
+Aceitamos carro e moto na troca. A avaliação é presencial, leva uns 20 minutos e o valor sai na hora. Quitamos o financiamento do carro do cliente, se tiver. Fotos e quilometragem pelo WhatsApp dão uma prévia do valor.
 
 TEST DRIVE
 Com hora marcada e CNH em mãos.
 
 HORÁRIO
-Segunda a sexta, 9h às 18h. Sábado, 9h às 14h.`,
+Segunda a sexta, 9h às 18h. Sábado, 9h às 14h. A 5 minutos da estação das barcas, com estacionamento para clientes.`,
       quandoChamarHumano: "Simulação de financiamento, proposta de troca com valor, desconto acima de R$ 2 mil, reclamação.",
     },
     conversas: [
@@ -265,7 +268,7 @@ Segunda a sexta, 9h às 18h. Sábado, 9h às 14h.`,
       nome: "Lia",
       tom: "leve e atenciosa, fala como vendedora de loja que conhece cada peça",
       conhecimento: `ALGODÃO CAMISARIA
-Camisas masculinas de algodão e linho, feitas no Brasil. Rua Visconde de Pirajá, 310, loja 4, Ipanema, Rio de Janeiro.
+Camisas masculinas de algodão e linho, feitas no Brasil (ateliês de Petrópolis e Nova Friburgo, em lotes pequenos; quando uma cor acaba, a próxima leva chega em umas três semanas). Só fibra natural, sem poliéster. Rua Visconde de Pirajá, 310, loja 4, Ipanema, Rio de Janeiro.
 
 PEÇAS E PREÇOS
 - Camisa de linho manga longa (branca, areia, azul-claro, verde-oliva): R$ 289
@@ -285,7 +288,10 @@ ENTREGA
 Rio de Janeiro capital: motoboy no mesmo dia para pedidos até 15h, R$ 15. Outras cidades: Correios, de 3 a 8 dias úteis, frete grátis acima de R$ 400.
 
 TROCA
-Troca em até 30 dias, com etiqueta. A primeira troca é por nossa conta.
+Troca em até 30 dias, com etiqueta, na loja ou pelos Correios. A primeira troca, com frete, é por nossa conta.
+
+OUTROS
+Embrulho para presente sem custo, com cartão escrito à mão se o cliente quiser. Pedido para empresa com bordado do logotipo a partir de 10 peças: orçamento em um dia útil (chame a equipe). Linho: lavar à mão ou no ciclo delicado e secar no cabide. Na loja, separamos peças no tamanho do cliente se ele avisar antes.
 
 HORÁRIO DA LOJA
 Segunda a sábado, 10h às 20h.`,
@@ -395,10 +401,13 @@ CONVÊNIO
 Não atende por convênio direto. Emite recibo para pedir reembolso ao plano de saúde.
 
 HORÁRIOS
-Segunda a quinta, 8h às 12h e 16h às 21h. Sexta, 8h às 12h. Horários livres nesta semana: terça 17h, quarta 9h, quinta 20h.
+Segunda a quinta, 8h às 12h e 16h às 21h. Sexta, 8h às 12h. Horários livres nos próximos dias: segunda 20h, terça 17h, quarta 9h, quinta 20h e sexta 11h. O consultório fica a duas quadras da praia de Icaraí, em prédio com portaria e elevador.
 
 REMARCAÇÃO
 Remarcar ou cancelar com até 24h de antecedência, sem custo. Menos que isso, a sessão é cobrada.
+
+COMO FUNCIONA
+Sessões de 50 minutos, em geral uma vez por semana no mesmo horário. Objetivos combinados no início e revistos a cada dois meses. Adolescentes a partir de 14 anos: a primeira conversa é com o responsável. Sigilo garantido. Online precisa de lugar reservado e fone de ouvido.
 
 PAGAMENTO
 Pix ou transferência, no dia da sessão.
@@ -414,7 +423,7 @@ Em crise ou risco, orientar a ligar para o CVV (188) ou SAMU (192) e chamar a He
         resumo: "Primeira sessão, quarta 9h, presencial",
         linhas: [
           [50, "cliente", "Oi, boa tarde. Queria saber como faço pra começar terapia com a Helena"],
-          [50, "agente", "Boa tarde, Camila! Que bom que você procurou. A Helena atende presencial em Icaraí e online. Se quiser, dá para começar com uma conversa de 15 minutos sem custo, ou já marcar a primeira sessão (50 minutos, R$ 220). Nesta semana há horário na terça 17h, quarta 9h e quinta 20h."],
+          [50, "agente", "Boa tarde, Camila! Que bom que você procurou. A Helena atende presencial em Icaraí e online. Se quiser, dá para começar com uma conversa de 15 minutos sem custo, ou já marcar a primeira sessão (50 minutos, R$ 220). Nos próximos dias há horário na terça 17h, quarta 9h e quinta 20h."],
           [44, "cliente", "Quarta 9h presencial. Aceita convênio?"],
           [44, "agente", "Marquei quarta às 9h, presencial, na Rua Gavião Peixoto, 125, sala 708. Convênio direto não, mas a Helena emite recibo para você pedir reembolso ao seu plano. Qualquer coisa, é só chamar aqui.", [{ nome: "salvar_cliente", resumo: "Salvou Camila Ferraz" }, { nome: "anotar_atendimento", resumo: "Agendar: primeira sessão quarta 9h, presencial" }]],
         ],
