@@ -17,6 +17,7 @@ import {
   INTENCOES,
   MODELO_PADRAO,
   NOME_INTENCAO,
+  PREFIXO_NUMERO_DEMONSTRACAO,
   custoIaMicros,
   historicoParaClaude,
   janelaAberta,
@@ -96,6 +97,7 @@ async function chamarGraph(caminho: string, token: string, corpo?: unknown) {
 }
 
 const enviarPadrao: EnviarWhatsapp = async ({ phoneNumberId, token }, para, texto) => {
+  if (phoneNumberId.startsWith(PREFIXO_NUMERO_DEMONSTRACAO)) return `wamid.${phoneNumberId}.${Date.now()}`;
   const json = await chamarGraph(`${encodeURIComponent(phoneNumberId)}/messages`, token, {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -350,6 +352,7 @@ async function marcarErro(db: BancoDeDados, empresaId: string, erro: string) {
 
 function conexaoDo(agente: typeof agentesWhatsapp.$inferSelect) {
   if (!agente.phoneNumberId || !agente.tokenCifrado) throw new ErroAtendimento("O número do WhatsApp desta loja ainda não foi conectado.");
+  if (agente.phoneNumberId.startsWith(PREFIXO_NUMERO_DEMONSTRACAO)) return { phoneNumberId: agente.phoneNumberId, token: "" };
   return { phoneNumberId: agente.phoneNumberId, token: decifrar(agente.tokenCifrado) };
 }
 

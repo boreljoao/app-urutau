@@ -274,3 +274,17 @@ export function SeletorPapel({ acao, atual, nome }: { acao: (fd: FormData) => Pr
     </select>
   );
 }
+
+/** Um botão que dispara a ação e mostra a resposta logo abaixo (ex.: a senha que aparece uma vez só). */
+export function BotaoForm({ acao, rotulo, campos = {}, className = "btn-secundario", pendenteTexto = "Criando…" }: { acao: Acao; rotulo: string; campos?: Record<string, string>; className?: string; pendenteTexto?: string }) {
+  const [estado, enviar, pendente] = useActionState(acao, {});
+  return (
+    <form action={enviar} className="space-y-2">
+      {Object.entries(campos).map(([nome, valor]) => (
+        <input key={nome} type="hidden" name={nome} value={valor} />
+      ))}
+      <button disabled={pendente} className={className}>{pendente ? pendenteTexto : rotulo}</button>
+      <Ok estado={estado} />
+    </form>
+  );
+}

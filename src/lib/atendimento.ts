@@ -31,6 +31,9 @@ export const precoDo = (modelo: string) => MODELOS.find((m) => modelo.startsWith
  */
 export const CUSTO_META_MENSAGEM_MICROS = 6_800;
 
+/** Número de mentira das empresas de demonstração: parece conectado e nunca chama a Meta. */
+export const PREFIXO_NUMERO_DEMONSTRACAO = "demonstracao-";
+
 export interface UsoDaChamada {
   input_tokens: number;
   output_tokens: number;

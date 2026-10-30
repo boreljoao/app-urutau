@@ -6,7 +6,8 @@ export function AbasClientes() {
     <Abas
       abas={[
         { href: "/admin/clientes", rotulo: "Clientes da Urutau" },
-        { href: "/admin/empresas", rotulo: "No sistema" },
+        { href: "/admin/empresas", rotulo: "No sistema", exato: true },
+        { href: "/admin/empresas/demonstracoes", rotulo: "Demonstrações" },
       ]}
     />
   );

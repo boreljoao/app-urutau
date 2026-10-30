@@ -12,6 +12,7 @@ import { errosPorCampo, esquemaEmpresa, formParaObjeto } from "@/lib/validacao";
 import { exigirSuperadmin } from "./acesso";
 import { registrarAuditoria } from "./auditoria";
 import { gerarSenhaProvisoria, hashSenha } from "./auth";
+import { DEMONSTRACOES, EMAIL_DEMONSTRACAO, RAMOS, criarDemonstracao } from "./demonstracao";
 
 /**
  * Ações do painel Urutau. Cada uma começa por exigirSuperadmin e deixa rastro na auditoria.
@@ -131,4 +132,38 @@ export async function redefinirSenhaAdmin(empresaId: string, usuarioId: string):
   });
   await registrarAuditoria(db, { empresaId, usuarioId: admin.id, ator: "admin", acao: "admin.redefinir_senha", entidade: "usuario", entidadeId: usuarioId });
   return { senha };
+}
+
+// ─── Demonstrações para a prospecção ─────────────────────────────────────────
+
+/** Cria ou recria as empresas de demonstração (todas, ou só o ramo do formulário). */
+export async function criarDemonstracoesAcao(_: EstadoForm, fd: FormData): Promise<EstadoForm> {
+  const admin = await exigirSuperadmin();
+  const pedido = String(fd.get("ramo") ?? "todos");
+  const ramos = RAMOS.filter((r) => pedido === "todos" || pedido === r);
+  if (!ramos.length) return { erros: { _: "Ramo desconhecido." } };
+  const db = obterDb();
+  const conta = await db.transaction((tx) => garantirUsuario(tx, "Demonstração Urutau", EMAIL_DEMONSTRACAO));
+  for (const ramo of ramos) {
+    const e = await criarDemonstracao(db, ramo, conta.id);
+    await registrarAuditoria(db, { empresaId: e.id, usuarioId: admin.id, ator: "admin", acao: "admin.criar_demonstracao", entidade: "empresa", entidadeId: e.id, dados: { ramo } });
+  }
+  revalidatePath("/admin/empresas");
+  const nomes = ramos.map((r) => DEMONSTRACOES[r].empresa.nome).join(", ");
+  return { ok: `Pronto: ${nomes}.${conta.senha ? avisoSenha(EMAIL_DEMONSTRACAO, conta.senha) : ""}` };
+}
+
+/** Troca a senha da conta de demonstração e derruba as sessões abertas com ela. */
+export async function novaSenhaDemonstracaoAcao(_: EstadoForm, __: FormData): Promise<EstadoForm> {
+  const admin = await exigirSuperadmin();
+  const db = obterDb();
+  const [conta] = await db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.email, EMAIL_DEMONSTRACAO)).limit(1);
+  if (!conta) return { erros: { _: "Crie as demonstrações primeiro." } };
+  const senha = gerarSenhaProvisoria();
+  await db.transaction(async (tx) => {
+    await tx.update(usuarios).set({ senhaHash: await hashSenha(senha) }).where(eq(usuarios.id, conta.id));
+    await tx.delete(sessoes).where(eq(sessoes.usuarioId, conta.id));
+  });
+  await registrarAuditoria(db, { usuarioId: admin.id, ator: "admin", acao: "admin.senha_demonstracao", entidade: "usuario", entidadeId: conta.id });
+  return { ok: `Nova senha de ${EMAIL_DEMONSTRACAO}: ${senha} (anote agora: ela não aparece de novo).` };
 }
