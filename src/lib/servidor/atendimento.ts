@@ -420,7 +420,9 @@ export async function responderConversa(db: BancoDeDados, conversaId: string, de
       texto = r.content
         .flatMap((b) => (b.type === "text" ? [b.text] : []))
         .join("\n")
-        .trim();
+        .trim()
+        // O modelo às vezes escreve **negrito** de markdown: no WhatsApp o negrito é *assim*.
+        .replace(/\*\*(.+?)\*\*/g, "*$1*");
       const usos = r.content.flatMap((b) => (b.type === "tool_use" ? [b] : []));
       if (r.stop_reason !== "tool_use" || usos.length === 0) break;
       mensagens.push({ role: "assistant", content: r.content });

@@ -278,6 +278,19 @@ PEÇAS E PREÇOS
 - Polo de algodão piquet (marinho, branca, preta, verde): R$ 159
 - Camiseta básica de algodão pima (6 cores): R$ 99
 
+ESTOQUE AGORA (peças na loja, por tamanho P / M / G / GG / XGG)
+- Linho manga longa branca: 3 / 8 / 6 / 2 / 1
+- Linho manga longa areia: 2 / 5 / 4 / 3 / 0
+- Linho manga longa azul-claro: 1 / 4 / 5 / 2 / 1
+- Linho manga curta terracota: 0 / 2 / 3 / 1 / 0
+- Oxford azul: 4 / 9 / 7 / 5 / 2
+- Oxford branca: 5 / 10 / 8 / 4 / 2
+- Listrada verde e branca: 1 / 3 / 2 / 1 / 0
+- Polo piquet marinho: 6 / 12 / 11 / 6 / 3
+- Polo piquet preta: 2 / 6 / 3 / 2 / 1
+- Camiseta pima branca: 12 / 20 / 18 / 9 / 4
+As outras cores e tamanhos estão esgotados agora; a próxima leva chega em umas três semanas e dá para deixar o pedido reservado.
+
 TAMANHOS
 P, M, G, GG e XGG. Tabela de medidas: P peito 100 cm, M 106 cm, G 112 cm, GG 118 cm, XGG 124 cm. Linho tem caimento mais solto.
 
