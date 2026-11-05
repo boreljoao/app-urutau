@@ -324,6 +324,56 @@ export const vendas = pgTable(
   ],
 );
 
+// ─── Agenda ──────────────────────────────────────────────────────────────────
+
+export const statusAgendamentoEnum = pgEnum("status_agendamento", ["marcado", "confirmado", "atendido", "faltou", "cancelado"]);
+
+/**
+ * Horário marcado: a sessão do consultório, a visita do serviço, o test drive da revenda.
+ * O nome fica gravado mesmo com cliente ligado, para a agenda não depender do cadastro.
+ */
+export const agendamentos = pgTable(
+  "agendamentos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    data: date("data").notNull(),
+    /** "HH:MM", hora de Brasília. */
+    hora: text("hora").notNull(),
+    duracaoMin: integer("duracao_min").notNull().default(50),
+    clienteId: uuid("cliente_id"),
+    nome: text("nome").notNull(),
+    /** O que vai acontecer: sessão, avaliação, visita técnica, test drive do Corolla… */
+    servico: text("servico").notNull().default(""),
+    /** Quem atende (pode não ser usuário do painel). */
+    profissional: text("profissional").notNull().default(""),
+    sala: text("sala").notNull().default(""),
+    valorCentavos: centavos("valor_centavos"),
+    status: statusAgendamentoEnum("status").notNull().default("marcado"),
+    observacao: text("observacao").notNull().default(""),
+    /** A venda lançada quando o atendimento foi recebido. */
+    vendaId: uuid("venda_id").references(() => vendas.id, { onDelete: "set null" }),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [
+    foreignKey({
+      name: "agendamentos_cliente_fk",
+      columns: [t.empresaId, t.clienteId],
+      foreignColumns: [clientes.empresaId, clientes.id],
+    }),
+    check("agendamentos_hora", sql`${t.hora} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`),
+    check("agendamentos_duracao", sql`${t.duracaoMin} between 5 and 720`),
+    check("agendamentos_valor", sql`${t.valorCentavos} is null or ${t.valorCentavos} > 0`),
+    index("agendamentos_empresa_data_idx").on(t.empresaId, t.data),
+    index("agendamentos_empresa_cliente_idx").on(t.empresaId, t.clienteId),
+  ],
+);
+
 // ─── Despesas ────────────────────────────────────────────────────────────────
 
 export const categoriasDespesa = pgTable(
@@ -925,6 +975,8 @@ export type Empresa = typeof empresas.$inferSelect;
 export type Perfil = (typeof perfilEnum.enumValues)[number];
 export type Modulo = (typeof moduloEnum.enumValues)[number];
 export type OrigemVenda = (typeof origemVendaEnum.enumValues)[number];
+export type StatusAgendamento = (typeof statusAgendamentoEnum.enumValues)[number];
+export type Agendamento = typeof agendamentos.$inferSelect;
 export type TipoMeta = (typeof tipoMetaEnum.enumValues)[number];
 export type OrigemLead = (typeof origemLeadEnum.enumValues)[number];
 export type EtapaLead = (typeof etapaLeadEnum.enumValues)[number];
