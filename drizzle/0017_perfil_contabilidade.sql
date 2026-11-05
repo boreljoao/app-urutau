@@ -1,0 +1,1 @@
+ALTER TYPE "public"."perfil_empresa" ADD VALUE 'contabilidade';

@@ -72,9 +72,19 @@ export const PERFIS: Record<Perfil, DefinicaoPerfil> = {
     ],
     atividadeSugerida: "comercio",
   },
+  contabilidade: {
+    nome: "Contabilidade",
+    descricao: "Carteira de clientes, documentos prontos e calendário de obrigações.",
+    modulos: ["financas", "agenda", "whatsapp"],
+    fontes: [
+      { nome: "Honorários mensais", natureza: "servico" },
+      { nome: "Serviços avulsos", natureza: "servico" },
+    ],
+    atividadeSugerida: "servicos",
+  },
 };
 
-export const ORDEM_PERFIS: Perfil[] = ["revenda_veiculos", "consultorio", "varejo", "servicos", "alimentacao", "financas"];
+export const ORDEM_PERFIS: Perfil[] = ["revenda_veiculos", "consultorio", "varejo", "servicos", "alimentacao", "contabilidade", "financas"];
 
 export const NOME_MODULO: Record<Modulo, string> = {
   financas: "Finanças",

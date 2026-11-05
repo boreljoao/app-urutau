@@ -155,7 +155,7 @@ export const esquemaEmpresa = z
     aliquotaIcms: percentualOpcional,
     inicioAtividade: dataOpcional,
     perfil: z
-      .enum(["financas", "revenda_veiculos", "consultorio", "varejo", "servicos", "alimentacao"], { message: "Escolha o tipo de negócio" })
+      .enum(["financas", "revenda_veiculos", "consultorio", "varejo", "servicos", "alimentacao", "contabilidade"], { message: "Escolha o tipo de negócio" })
       .optional()
       .default("financas"),
   })

@@ -120,6 +120,13 @@
       "when": 1793225405044,
       "tag": "0016_whatsapp_haiku",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1793846451532,
+      "tag": "0017_perfil_contabilidade",
+      "breakpoints": true
     }
   ]
 }

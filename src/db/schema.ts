@@ -86,6 +86,7 @@ export const perfilEnum = pgEnum("perfil_empresa", [
   "varejo",
   "servicos",
   "alimentacao",
+  "contabilidade",
 ]);
 export const moduloEnum = pgEnum("modulo", ["financas", "agenda", "estoque", "whatsapp"]);
 /** Por onde a venda entrou. Só "manual" já nasce conferida; as automáticas esperam o check do dono. */
