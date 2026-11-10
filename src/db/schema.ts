@@ -356,6 +356,17 @@ export const agendamentos = pgTable(
     /** A venda lançada quando o atendimento foi recebido. */
     vendaId: uuid("venda_id").references(() => vendas.id, { onDelete: "set null" }),
     criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    /** De onde veio: "painel", "online" (página de agendamento) ou "whatsapp" (atendente). */
+    origem: text("origem").notNull().default("painel"),
+    /** Código do link que o paciente usa para confirmar, remarcar ou cancelar. */
+    tokenPaciente: text("token_paciente")
+      .notNull()
+      .unique()
+      .default(sql`replace(gen_random_uuid()::text, '-', '')`),
+    /** Quando cada lembrete saiu: "marcado" (ao marcar), "h48" e "h2". */
+    lembretes: jsonb("lembretes").$type<Partial<Record<"marcado" | "h48" | "h2", string>>>().notNull().default({}),
+    /** Quando o paciente respondeu pelo link ou pelo botão do WhatsApp. */
+    respondidoEm: timestamp("respondido_em", { withTimezone: true }),
     criadoEm: criadoEm(),
     atualizadoEm: atualizadoEm(),
     excluidoEm: excluidoEm(),
@@ -1469,6 +1480,11 @@ export const empresaPainel = pgTable("empresa_painel", {
   especialidade: text("especialidade"),
   /** Meta de faturamento do mês, para o cartão da Visão geral. */
   metaCentavos: bigint("meta_centavos", { mode: "number" }),
+  /** Página pública de agendamento: ligada ou não, o endereço e as regras. */
+  agendaOnline: boolean("agenda_online").notNull().default(false),
+  slug: text("slug").unique(),
+  antecedenciaHoras: integer("antecedencia_horas").notNull().default(2),
+  diasOnline: integer("dias_online").notNull().default(14),
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 });
 export type ConfigPainel = typeof empresaPainel.$inferSelect;
