@@ -1345,3 +1345,68 @@ export const mensagensSite = pgTable(
   },
   (t) => [index("mensagens_site_conversa_idx").on(t.conversaId, t.criadoEm), index("mensagens_site_criado_idx").on(t.criadoEm)],
 );
+
+// ---------- Instagram: posts criados pela IA, analisados e enviados pelo Buffer ----------
+
+export const situacaoPostInstagramEnum = pgEnum("situacao_post_instagram", [
+  "criando",
+  "analisando",
+  "pronto",
+  "enviando",
+  "enviado",
+  "erro",
+]);
+export type SituacaoPostInstagram = (typeof situacaoPostInstagramEnum.enumValues)[number];
+
+/** O que a IA escreveu para o post. */
+export interface ConteudoPostInstagram {
+  gancho: string;
+  legenda: string;
+  hashtags: string[];
+  arte: { titulo: string; subtitulo: string; selo: string };
+  roteiroReel: string[];
+  textoAlternativo: string;
+}
+
+/** A conferência do post antes de sair. */
+export interface AnalisePostInstagram {
+  nota: number;
+  veredito: "forte" | "ok" | "fraco";
+  gancho: { nota: number; pontos: { nome: string; nota: number; detalhe: string }[]; alertas: string[] };
+  checagens: { nome: string; status: "ok" | "atencao"; detalhe: string }[];
+  limpeza: { de: string; para: string }[];
+  visivelNoFeed: string;
+}
+
+export const postsInstagram = pgTable(
+  "posts_instagram",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    tema: text("tema").notNull(),
+    situacao: situacaoPostInstagramEnum("situacao").notNull().default("criando"),
+    conteudo: jsonb("conteudo").$type<ConteudoPostInstagram>(),
+    analise: jsonb("analise").$type<AnalisePostInstagram>(),
+    /** "agora" publica na hora; "fila" entra no próximo horário da fila do Buffer. */
+    envio: text("envio"),
+    bufferPostId: text("buffer_post_id"),
+    erro: text("erro"),
+    criadoPor: uuid("criado_por"),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+  },
+  (t) => [index("posts_instagram_empresa_idx").on(t.empresaId, t.criadoEm)],
+);
+
+/** O Buffer de cada empresa: a chave fica cifrada (CHAVE_SEGREDOS), como o token do WhatsApp. */
+export const contasInstagram = pgTable("contas_instagram", {
+  empresaId: uuid("empresa_id")
+    .primaryKey()
+    .references(() => empresas.id, { onDelete: "cascade" }),
+  bufferTokenCifrado: text("buffer_token_cifrado").notNull(),
+  canalId: text("canal_id").notNull(),
+  canalNome: text("canal_nome").notNull(),
+  atualizadoEm: atualizadoEm(),
+});
