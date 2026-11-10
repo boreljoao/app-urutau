@@ -1349,14 +1349,38 @@ export const mensagensSite = pgTable(
 // ---------- Instagram: posts criados pela IA, analisados e enviados pelo Buffer ----------
 
 export const situacaoPostInstagramEnum = pgEnum("situacao_post_instagram", [
+  "rascunho",
   "criando",
   "analisando",
   "pronto",
   "enviando",
   "enviado",
+  "agendado",
+  "publicado",
   "erro",
 ]);
 export type SituacaoPostInstagram = (typeof situacaoPostInstagramEnum.enumValues)[number];
+
+export const formatoPostInstagramEnum = pgEnum("formato_post_instagram", ["post", "carrossel", "reel", "story"]);
+export type FormatoPostInstagram = (typeof formatoPostInstagramEnum.enumValues)[number];
+
+/** Material enviado para o post (fica no Vercel Blob). */
+export interface ArquivoPostInstagram {
+  url: string;
+  nome: string;
+  tipo: "imagem" | "video" | "documento" | "link";
+  bytes: number;
+}
+
+/** Números do post publicado, lidos do Buffer. */
+export interface MetricasPostInstagram {
+  visualizacoes: number | null;
+  alcance: number | null;
+  curtidas: number | null;
+  comentarios: number | null;
+  salvos: number | null;
+  compartilhamentos: number | null;
+}
 
 /** O que a IA escreveu para o post. */
 export interface ConteudoPostInstagram {
@@ -1366,6 +1390,8 @@ export interface ConteudoPostInstagram {
   arte: { titulo: string; subtitulo: string; selo: string };
   roteiroReel: string[];
   textoAlternativo: string;
+  /** Texto curto para cada foto do carrossel, na ordem. */
+  slides?: string[];
 }
 
 /** A conferência do post antes de sair. */
@@ -1386,12 +1412,24 @@ export const postsInstagram = pgTable(
       .notNull()
       .references(() => empresas.id, { onDelete: "cascade" }),
     tema: text("tema").notNull(),
+    objetivo: text("objetivo"),
+    orientacoes: text("orientacoes"),
+    formato: formatoPostInstagramEnum("formato").notNull().default("post"),
+    arquivos: jsonb("arquivos").$type<ArquivoPostInstagram[]>().notNull().default([]),
+    /** "revisar": o dono aprova antes; "automatico": sai sozinho assim que fica pronto. */
+    modo: text("modo").notNull().default("revisar"),
     situacao: situacaoPostInstagramEnum("situacao").notNull().default("criando"),
     conteudo: jsonb("conteudo").$type<ConteudoPostInstagram>(),
     analise: jsonb("analise").$type<AnalisePostInstagram>(),
     /** "agora" publica na hora; "fila" entra no próximo horário da fila do Buffer. */
     envio: text("envio"),
     bufferPostId: text("buffer_post_id"),
+    /** Data e hora marcadas para sair (null = próximo horário da fila do Buffer). */
+    agendadoPara: timestamp("agendado_para", { withTimezone: true }),
+    publicadoEm: timestamp("publicado_em", { withTimezone: true }),
+    linkInstagram: text("link_instagram"),
+    metricas: jsonb("metricas").$type<MetricasPostInstagram>(),
+    metricasEm: timestamp("metricas_em", { withTimezone: true }),
     erro: text("erro"),
     criadoPor: uuid("criado_por"),
     criadoEm: criadoEm(),
