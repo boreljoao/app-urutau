@@ -215,3 +215,9 @@ body {
 .mapa-central .leaflet-popup-content a {
   color: var(--destaque);
 }
+
+/* Telas de trabalho (caixa, inventário) usam a largura toda no computador. */
+main:has(> .tela-larga),
+main:has(> div > .tela-larga) {
+  max-width: 80rem;
+}

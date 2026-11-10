@@ -17,7 +17,9 @@ export default async function Mais({ params }: { params: Promise<{ empresaId: st
     ...(pode(papel, "ver_clientes") ? [{ href: `${base}/clientes`, titulo: "Clientes", desc: "Quem compra, com telefone e histórico" }] : []),
     // Módulos ligados que ainda não têm tela: aparecem como "em breve".
     ...(modulos.has("whatsapp") && pode(papel, "ver_clientes") ? [{ href: `${base}/whatsapp`, ...telaDoModulo(empresa.perfil, "whatsapp") }] : []),
-    ...(["agenda", "estoque"] as const).filter((m) => modulos.has(m)).map((m) => telaDoModulo(empresa.perfil, m)),
+    ...(modulos.has("estoque") && pode(papel, "lancar") ? [{ href: `${base}/caixa`, titulo: "Caixa", desc: "Vender com leitor de código de barras ou na tela" }] : []),
+    ...(modulos.has("estoque") && pode(papel, "ver_lancamentos") ? [{ href: `${base}/estoque`, ...telaDoModulo(empresa.perfil, "estoque") }] : []),
+    ...(modulos.has("agenda") ? [telaDoModulo(empresa.perfil, "agenda")] : []),
     ...(pode(papel, "ver_painel")
       ? [
           { href: `${base}/contas`, titulo: "Contas a pagar e receber", desc: "Agenda de vencimentos e atrasos" },

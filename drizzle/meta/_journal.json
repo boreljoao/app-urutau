@@ -176,6 +176,13 @@
       "when": 1794350722954,
       "tag": "0024_patio_veiculos",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794351353046,
+      "tag": "0025_estoque_caixa",
+      "breakpoints": true
     }
   ]
 }
