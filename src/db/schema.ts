@@ -356,6 +356,8 @@ export const agendamentos = pgTable(
     /** A venda lançada quando o atendimento foi recebido. */
     vendaId: uuid("venda_id").references(() => vendas.id, { onDelete: "set null" }),
     criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    /** Revenda: o carro que a visita, o test drive ou a entrega envolve. */
+    veiculoId: uuid("veiculo_id").references((): AnyPgColumn => veiculos.id, { onDelete: "set null" }),
     /** Sessão a distância (vídeo ou telefone). */
     online: boolean("online").notNull().default(false),
     /** Horários da mesma série semanal (sessão recorrente) têm o mesmo código. */
@@ -1492,3 +1494,47 @@ export const empresaPainel = pgTable("empresa_painel", {
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 });
 export type ConfigPainel = typeof empresaPainel.$inferSelect;
+
+// ─── Pátio da revenda ────────────────────────────────────────────────────────
+
+export const statusVeiculoEnum = pgEnum("status_veiculo", ["preparacao", "disponivel", "reservado", "vendido"]);
+export type StatusVeiculo = (typeof statusVeiculoEnum.enumValues)[number];
+
+/**
+ * Cada carro do pátio da revenda: o que custou (compra + preparação), por quanto está anunciado e,
+ * quando sai, por quanto foi vendido. A venda do carro também entra em `vendas`, para o financeiro.
+ */
+export const veiculos = pgTable(
+  "veiculos",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    empresaId: uuid("empresa_id")
+      .notNull()
+      .references(() => empresas.id, { onDelete: "cascade" }),
+    modelo: text("modelo").notNull(),
+    placa: text("placa"),
+    ano: integer("ano"),
+    km: integer("km"),
+    cor: text("cor"),
+    status: statusVeiculoEnum("status").notNull().default("preparacao"),
+    custoCompraCentavos: centavos("custo_compra_centavos").notNull().default(0),
+    custoPreparacaoCentavos: centavos("custo_preparacao_centavos").notNull().default(0),
+    precoCentavos: centavos("preco_centavos"),
+    valorVendaCentavos: centavos("valor_venda_centavos"),
+    entradaEm: date("entrada_em").notNull(),
+    vendidoEm: date("vendido_em"),
+    vendaId: uuid("venda_id").references(() => vendas.id, { onDelete: "set null" }),
+    clienteId: uuid("cliente_id").references(() => clientes.id, { onDelete: "set null" }),
+    observacao: text("observacao").notNull().default(""),
+    criadoPor: uuid("criado_por").references(() => usuarios.id, { onDelete: "set null" }),
+    criadoEm: criadoEm(),
+    atualizadoEm: atualizadoEm(),
+    excluidoEm: excluidoEm(),
+  },
+  (t) => [
+    index("veiculos_empresa_status_idx").on(t.empresaId, t.status),
+    index("veiculos_empresa_vendido_idx").on(t.empresaId, t.vendidoEm),
+    check("veiculos_custos_positivos", sql`${t.custoCompraCentavos} >= 0 and ${t.custoPreparacaoCentavos} >= 0`),
+  ],
+);
+export type Veiculo = typeof veiculos.$inferSelect;
