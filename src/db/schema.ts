@@ -326,7 +326,7 @@ export const vendas = pgTable(
 
 // ─── Agenda ──────────────────────────────────────────────────────────────────
 
-export const statusAgendamentoEnum = pgEnum("status_agendamento", ["marcado", "confirmado", "atendido", "faltou", "cancelado"]);
+export const statusAgendamentoEnum = pgEnum("status_agendamento", ["marcado", "confirmado", "atendido", "faltou", "cancelado", "bloqueado"]);
 
 /**
  * Horário marcado: a sessão do consultório, a visita do serviço, o test drive da revenda.
@@ -1448,3 +1448,27 @@ export const contasInstagram = pgTable("contas_instagram", {
   canalNome: text("canal_nome").notNull(),
   atualizadoEm: atualizadoEm(),
 });
+
+// ---------- Painel por empresa: tela inicial, menu, nomes e especialidade ----------
+
+/** Um item do menu como a empresa quer ver: na ordem da lista, com nome próprio ou escondido. */
+export interface ItemMenuEmpresa {
+  id: string;
+  nome?: string;
+  oculto?: boolean;
+}
+
+export const empresaPainel = pgTable("empresa_painel", {
+  empresaId: uuid("empresa_id")
+    .primaryKey()
+    .references(() => empresas.id, { onDelete: "cascade" }),
+  /** "inicio" (Visão geral) ou o id de outro item do menu, como "agenda". Null = o padrão do ramo. */
+  telaInicial: text("tela_inicial"),
+  menu: jsonb("menu").$type<ItemMenuEmpresa[]>(),
+  /** Para consultório: "psicologia", "odontologia" ou "outra"; troca os nomes da agenda. */
+  especialidade: text("especialidade"),
+  /** Meta de faturamento do mês, para o cartão da Visão geral. */
+  metaCentavos: bigint("meta_centavos", { mode: "number" }),
+  atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
+});
+export type ConfigPainel = typeof empresaPainel.$inferSelect;
