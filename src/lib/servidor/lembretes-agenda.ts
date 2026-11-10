@@ -88,6 +88,7 @@ export async function enviarLembretesAgenda(db: BancoDeDados, agora = new Date()
       nome: agendamentos.nome,
       servico: agendamentos.servico,
       token: agendamentos.tokenPaciente,
+      serieId: agendamentos.serieId,
       lembretes: agendamentos.lembretes,
       telefone: clientes.telefone,
       empresa: empresas.nome,
@@ -110,10 +111,15 @@ export async function enviarLembretesAgenda(db: BancoDeDados, agora = new Date()
     )
     .limit(400);
 
+  // Série semanal: só a primeira sessão futura manda o aviso "ao marcar".
+  const primeiroDaSerie = new Map<string, string>();
+  for (const a of [...linhas].sort((x, y) => `${x.data} ${x.hora}`.localeCompare(`${y.data} ${y.hora}`)))
+    if (a.serieId && !primeiroDaSerie.has(a.serieId)) primeiroDaSerie.set(a.serieId, a.id);
   const resultado = { enviados: 0, simulados: 0, falhas: 0 };
   for (const a of linhas) {
     const lembretes = a.lembretes as Lembretes;
-    const tipo = lembreteDevido({ ...a, lembretes }, agora);
+    let tipo = lembreteDevido({ ...a, lembretes }, agora);
+    if (tipo === "marcado" && a.serieId && primeiroDaSerie.get(a.serieId) !== a.id) tipo = null;
     if (!tipo || !a.phoneNumberId) continue;
     // Depois de uma recusa da Meta (modelo não aprovado, número sem crédito), espera 6h para tentar de novo.
     if (lembretes.erro && agora.getTime() - new Date(lembretes.erro).getTime() < 6 * HORA) continue;
