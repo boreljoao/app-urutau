@@ -3,7 +3,7 @@
  * total do item, curva ABC, cobertura, sugestão de compra, código de barras e importação por CSV.
  */
 import type { TipoMovimento, Unidade } from "@/db/schema";
-import { lerCsv } from "@/lib/comercial";
+import { lerCsv } from "@/lib/csv";
 import { type Centavos, lerReais } from "@/lib/dinheiro";
 
 export const MIL = 1000;
@@ -69,6 +69,36 @@ export function margem(precoCentavos: Centavos, custoCentavos: Centavos): number
 
 export function troco(pagoCentavos: Centavos, totalCentavos: Centavos): Centavos | null {
   return pagoCentavos >= totalCentavos ? pagoCentavos - totalCentavos : null;
+}
+
+/** A quantidade cabe na unidade? "un", "cx", "pct"… não vendem meia unidade. */
+export const quantidadeCabe = (quantidadeMil: number, unidade: Unidade) => Number.isSafeInteger(quantidadeMil) && (UNIDADES[unidade].fracionada || quantidadeMil % MIL === 0);
+
+/** Custo de uma quantidade, arredondado como o total do item (meio centavo sobe). */
+export const custoDaQuantidade = (quantidadeMil: number, custoUnitarioCentavos: Centavos): Centavos => Math.round((quantidadeMil * custoUnitarioCentavos) / MIL);
+
+/**
+ * Reparte o desconto da venda inteira entre os itens, na proporção de cada um, em centavos
+ * inteiros: os centavos que sobram do arredondamento vão para os maiores restos. A soma das
+ * partes é sempre o desconto, e nenhum item fica com parte maior que o próprio total.
+ */
+export function ratearDesconto(totais: Centavos[], descontoCentavos: Centavos): Centavos[] {
+  const soma = totais.reduce((s, t) => s + t, 0);
+  const desconto = Math.min(Math.max(0, descontoCentavos), soma);
+  if (!desconto || !soma) return totais.map(() => 0);
+  const partes = totais.map((t, i) => {
+    const exato = BigInt(t) * BigInt(desconto);
+    return { i, base: Number(exato / BigInt(soma)), resto: Number(exato % BigInt(soma)) };
+  });
+  let falta = desconto - partes.reduce((s, p) => s + p.base, 0);
+  for (const p of [...partes].sort((a, b) => b.resto - a.resto || a.i - b.i)) {
+    if (falta <= 0) break;
+    if (p.base < totais[p.i]) {
+      p.base++;
+      falta--;
+    }
+  }
+  return partes.map((p) => p.base);
 }
 
 // ─── Situação, giro e compra ─────────────────────────────────────────────────
@@ -141,16 +171,20 @@ export const limparCodigo = (c: string) => c.trim().replace(/\s+/g, "");
 
 // ─── Importação por CSV ──────────────────────────────────────────────────────
 
+/**
+ * Uma linha da planilha. Campo `undefined` = a coluna não veio ou a célula está vazia: na
+ * atualização ele fica como está (zero só quando a planilha diz zero).
+ */
 export interface ProdutoImportado {
   nome: string;
   sku: string | null;
   codigoBarras: string | null;
-  categoria: string;
-  unidade: Unidade;
-  precoCentavos: Centavos;
-  custoCentavos: Centavos;
-  saldoMil: number;
-  minimoMil: number;
+  categoria?: string;
+  unidade?: Unidade;
+  precoCentavos?: Centavos;
+  custoCentavos?: Centavos;
+  saldoMil?: number;
+  minimoMil?: number;
 }
 
 const sem = (s: string) =>
@@ -193,32 +227,42 @@ export function produtosDoCsv(conteudo: string): { produtos: ProdutoImportado[];
     const n = i + 2;
     const nome = valor(l, "nome");
     if (!nome) return erros.push({ linha: n, motivo: "sem nome" });
-    const unidade = UNIDADE_POR_TEXTO[sem(valor(l, "unidade"))] ?? "un";
-    const dinheiro = (k: keyof ProdutoImportado) => {
+    const textoUnidade = valor(l, "unidade");
+    const unidade = textoUnidade ? UNIDADE_POR_TEXTO[sem(textoUnidade)] : undefined;
+    if (textoUnidade && !unidade) return erros.push({ linha: n, motivo: `unidade "${textoUnidade}" desconhecida em "${nome}"` });
+    // Sem coluna/célula: undefined (não mexe). Com valor: precisa ser lido e não negativo.
+    const dinheiro = (k: keyof ProdutoImportado): Centavos | undefined | null => {
       const v = valor(l, k);
-      return v ? lerReais(v.replace(/^R\$\s*/i, "")) : 0;
+      if (!v) return undefined;
+      const c = lerReais(v.replace(/^R\$\s*/i, ""));
+      return c === null || c < 0 ? null : c;
     };
-    const quantidade = (k: keyof ProdutoImportado) => {
+    const quantidade = (k: keyof ProdutoImportado): number | undefined | null => {
       const v = valor(l, k);
-      return v ? lerQuantidade(v, UNIDADES[unidade].fracionada ? unidade : "kg") : 0;
+      if (!v) return undefined;
+      // Sem a coluna unidade, a fração é conferida no servidor contra a unidade do cadastro.
+      const q = lerQuantidade(v, unidade ?? "kg");
+      return q === null || q < 0 ? null : q;
     };
     const preco = dinheiro("precoCentavos");
     const custo = dinheiro("custoCentavos");
     const saldo = quantidade("saldoMil");
     const minimo = quantidade("minimoMil");
-    if (preco === null || custo === null) return erros.push({ linha: n, motivo: `valor inválido em "${nome}"` });
-    if (saldo === null || minimo === null) return erros.push({ linha: n, motivo: `quantidade inválida em "${nome}"` });
+    if (preco === null || custo === null) return erros.push({ linha: n, motivo: `valor inválido ou negativo em "${nome}"` });
+    if (saldo === null || minimo === null)
+      return erros.push({ linha: n, motivo: `quantidade inválida em "${nome}"${unidade && !UNIDADES[unidade].fracionada ? " (esta unidade não aceita fração)" : ""}` });
     const codigo = limparCodigo(valor(l, "codigoBarras")).replace(/\.0+$/, "");
+    const categoria = valor(l, "categoria").slice(0, 60);
     produtos.push({
       nome: nome.slice(0, 200),
       sku: valor(l, "sku").slice(0, 60) || null,
       codigoBarras: codigo || null,
-      categoria: valor(l, "categoria").slice(0, 60),
+      categoria: categoria || undefined,
       unidade,
       precoCentavos: preco,
       custoCentavos: custo,
-      saldoMil: UNIDADES[unidade].fracionada ? saldo : Math.round(saldo / MIL) * MIL,
-      minimoMil: UNIDADES[unidade].fracionada ? minimo : Math.round(minimo / MIL) * MIL,
+      saldoMil: saldo,
+      minimoMil: minimo,
     });
   });
   return { produtos, erros, colunas: cabecalho };

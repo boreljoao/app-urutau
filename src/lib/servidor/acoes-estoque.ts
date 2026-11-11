@@ -21,6 +21,7 @@ import {
   registrarVendaCaixa,
   salvarProduto,
   type VendaDoCaixa,
+  type VendaFeita,
 } from "./estoque";
 
 async function exigirEstoque(empresaId: string, acao: Acao) {
@@ -149,12 +150,12 @@ export async function importarAcao(empresaId: string, lista: ProdutoImportado[])
     nome: z.string().min(1).max(200),
     sku: z.string().max(60).nullable(),
     codigoBarras: z.string().max(40).nullable(),
-    categoria: z.string().max(60),
-    unidade: z.enum(unidadeProdutoEnum.enumValues),
-    precoCentavos: z.number().int().min(0),
-    custoCentavos: z.number().int().min(0),
-    saldoMil: z.number().int(),
-    minimoMil: z.number().int().min(0),
+    categoria: z.string().max(60).optional(),
+    unidade: z.enum(unidadeProdutoEnum.enumValues).optional(),
+    precoCentavos: z.number().int().min(0).optional(),
+    custoCentavos: z.number().int().min(0).optional(),
+    saldoMil: z.number().int().min(0).optional(),
+    minimoMil: z.number().int().min(0).optional(),
   });
   const r = z.array(item).min(1).max(5000).safeParse(lista);
   if (!r.success) return { erro: "A planilha tem linhas inválidas." };
@@ -186,9 +187,11 @@ const esquemaVenda = z.object({
   formaPagamento: z.enum(formaPagamentoEnum.enumValues),
   clienteId: z.uuid().nullable(),
   aReceber: z.boolean(),
+  valorEntregueCentavos: z.number().int().min(0).max(100_000_000_00).nullable().optional(),
+  chave: z.uuid().nullable().optional(),
 });
 
-export async function venderAcao(empresaId: string, venda: VendaDoCaixa): Promise<{ erro: string } | { vendaId: string; totalCentavos: number; estoqueNegativo: string[] }> {
+export async function venderAcao(empresaId: string, venda: VendaDoCaixa): Promise<{ erro: string } | VendaFeita> {
   const ctx = await exigirEstoque(empresaId, "lancar");
   const r = esquemaVenda.safeParse(venda);
   if (!r.success) return { erro: "O carrinho tem algo inválido. Confira as quantidades." };

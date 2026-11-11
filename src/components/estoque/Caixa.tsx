@@ -37,6 +37,8 @@ type Vender = (v: {
   formaPagamento: FormaPagamento;
   clienteId: string | null;
   aReceber: boolean;
+  valorEntregueCentavos?: number | null;
+  chave?: string | null;
 }) => Promise<Resultado>;
 
 const FORMAS: { id: FormaPagamento | "fiado"; nome: string; tecla: string }[] = [
@@ -82,6 +84,8 @@ export function Caixa({
   const [erro, setErro] = useState<string>();
   const [pendente, iniciar] = useTransition();
   const [avulso, setAvulso] = useState(false);
+  // Uma chave por carrinho: se o envio repetir (clique duplo, rede caiu), o servidor devolve a mesma venda.
+  const chaveVenda = useRef("");
 
   const porCodigo = useMemo(() => {
     const m = new Map<string, ProdutoDoCaixa>();
@@ -160,16 +164,21 @@ export function Caixa({
     setForma("pix");
     setErro(undefined);
     setAviso(null);
+    chaveVenda.current = "";
     focarBusca();
   };
 
   const finalizar = useCallback(() => {
     if (!linhas.length || pendente) return;
     if (forma === "fiado" && !clienteEscolhido) return setErro("Venda fiado precisa de cliente: escolha quem está levando.");
+    if (forma === "dinheiro" && recebido && recebidoCentavos == null) return setErro("Valor recebido inválido. Exemplo: 50,00");
     if (forma === "dinheiro" && recebido && troco === null) return setErro("O valor recebido é menor que o total.");
     setErro(undefined);
+    if (!chaveVenda.current) chaveVenda.current = crypto.randomUUID();
     iniciar(async () => {
       const r = await vender({
+        chave: chaveVenda.current,
+        valorEntregueCentavos: forma === "dinheiro" && recebido ? recebidoCentavos : null,
         itens: linhas.map((l) => (l.produtoId ? { produtoId: l.produtoId, quantidadeMil: l.quantidadeMil } : { produtoId: null, descricao: l.nome, quantidadeMil: l.quantidadeMil, precoUnitarioCentavos: l.precoCentavos })),
         descontoCentavos,
         formaPagamento: forma === "fiado" ? "outro" : forma,
@@ -184,7 +193,7 @@ export function Caixa({
       setFeito({ total: r.totalCentavos, troco, alertas: r.estoqueNegativo, cliente: clienteEscolhido, itens: linhas });
       router.refresh();
     });
-  }, [linhas, pendente, forma, clienteEscolhido, recebido, troco, descontoCentavos, vender, router]);
+  }, [linhas, pendente, forma, clienteEscolhido, recebido, recebidoCentavos, troco, descontoCentavos, vender, router]);
 
   // Atalhos de caixa: F2 finaliza, Esc limpa a busca (ou fecha o recibo), 1–5 escolhem o pagamento fora dos campos.
   useEffect(() => {

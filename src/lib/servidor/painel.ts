@@ -22,6 +22,8 @@ export interface PontoGrafico {
   faturamento: number;
   despesas: number;
   lucro: number;
+  /** Nenhuma venda, despesa, folha ou juro no mês: só a estimativa de imposto (o DAS fixo do MEI). */
+  semLancamentos: boolean;
 }
 
 export interface ItemVencimento {
@@ -200,7 +202,8 @@ export async function carregarPainel(
       entradasCaixa: 0,
       saidasCaixa: 0,
     });
-    return { mes: m, faturamento: r.faturamento, despesas: r.despesas + r.impostos, lucro: r.lucro };
+    const semLancamentos = !fatMap.get(m) && !(despMap.get(m) ?? []).length && !folhaMap.get(m) && !jurosMap.get(m);
+    return { mes: m, faturamento: r.faturamento, despesas: r.despesas + r.impostos, lucro: r.lucro, semLancamentos };
   });
 
   const resumo = resumirMes({

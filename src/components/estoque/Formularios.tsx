@@ -546,9 +546,9 @@ export function Importar({ importar }: { importar: (l: ProdutoImportado[]) => Pr
                         {p.categoria && <span className="block text-xs text-suave">{p.categoria}</span>}
                       </td>
                       <td className="px-2 py-2 text-suave">{p.codigoBarras ?? p.sku ?? "–"}</td>
-                      <td className="numero px-2 py-2 text-right">{formatarReais(p.precoCentavos)}</td>
-                      <td className="numero px-2 py-2 text-right text-suave">{formatarReais(p.custoCentavos)}</td>
-                      <td className="numero px-4 py-2 text-right">{formatarQuantidade(p.saldoMil, p.unidade)}</td>
+                      <td className="numero px-2 py-2 text-right">{p.precoCentavos == null ? "–" : formatarReais(p.precoCentavos)}</td>
+                      <td className="numero px-2 py-2 text-right text-suave">{p.custoCentavos == null ? "–" : formatarReais(p.custoCentavos)}</td>
+                      <td className="numero px-4 py-2 text-right">{p.saldoMil == null ? "não muda" : formatarQuantidade(p.saldoMil, p.unidade ?? "un")}</td>
                     </tr>
                   ))}
                 </tbody>

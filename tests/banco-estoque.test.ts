@@ -16,6 +16,7 @@ import {
   ajustarInventario,
   caixaDoDia,
   cancelarVendaCaixa,
+  contarProdutos,
   importarProdutos,
   listarProdutos,
   obterProduto,
@@ -121,8 +122,11 @@ describe("caixa", () => {
     expect(v.conferidoEm).not.toBeNull();
     expect(v.descricao).toBe("Caixa: Café 500g e mais 3 itens");
     const itens = await db.select().from(vendaItens).where(eq(vendaItens.vendaId, r.vendaId));
-    expect(itens.find((i) => i.descricao === "Café 500g")).toMatchObject({ precoUnitarioCentavos: 1_890, totalCentavos: 3_780, custoUnitarioCentavos: 1_300 });
-    expect(itens.find((i) => i.descricao === "Sacola")).toMatchObject({ produtoId: null, totalCentavos: 50 });
+    // O R$ 1,00 de desconto da venda é repartido pelos itens: a soma dos itens fecha o total.
+    expect(itens.find((i) => i.descricao === "Café 500g")).toMatchObject({ precoUnitarioCentavos: 1_890, descontoVendaCentavos: 59, totalCentavos: 3_721, custoUnitarioCentavos: 1_300, custoTotalCentavos: 2_600 });
+    expect(itens.find((i) => i.descricao === "Sacola")).toMatchObject({ produtoId: null, descontoVendaCentavos: 1, totalCentavos: 49 });
+    expect(itens.reduce((t, i) => t + i.totalCentavos, 0)).toBe(6_330);
+    expect(itens.reduce((t, i) => t + i.descontoVendaCentavos, 0)).toBe(100);
     expect((await saldo(ids.cafe)).s).toBe(18_000);
     expect((await saldo(ids.queijo)).s).toBe(2_500);
     expect(await db.select().from(movimentosEstoque).where(eq(movimentosEstoque.produtoId, ids.cafezinho))).toHaveLength(0);
@@ -160,8 +164,11 @@ describe("caixa", () => {
   it("fechamento do dia por forma de pagamento", async () => {
     const c = await caixaDoDia(db, loja.id);
     expect(c.lista).toHaveLength(5);
-    expect(Object.fromEntries(c.porForma)).toEqual({ pix: 6_330, dinheiro: 5_670, outro: 1_890 });
+    // Fiado é venda do dia, mas não entrou no caixa.
+    expect(Object.fromEntries(c.porForma)).toEqual({ pix: 6_330, dinheiro: 5_670 });
     expect(c.total).toBe(13_890);
+    expect(c.recebido).toBe(12_000);
+    expect(c.aReceber).toBe(1_890);
     expect(c.lista.find((v) => v.valor === 6_330)?.itens).toBe(4);
   });
 });
@@ -204,5 +211,95 @@ describe("painel", () => {
     expect(p.recentes[0].tipo).toBe("venda");
     expect((await listarProdutos(db, loja.id, { filtro: "repor" })).map((x) => x.nome)).toEqual(["Café 500g"]);
     expect((await listarProdutos(db, loja.id, { busca: "7896000000001" })).map((x) => x.nome)).toEqual(["Açúcar 1kg"]);
+  });
+});
+
+// ─── Achados da auditoria (11/11/2026) ───────────────────────────────────────
+
+describe("auditoria: caixa confiável", () => {
+  const venda = (extra: Partial<Parameters<typeof registrarVendaCaixa>[3]> = {}) => ({
+    itens: [{ produtoId: ids.cem, quantidadeMil: 1_000 }],
+    descontoCentavos: 0,
+    formaPagamento: "dinheiro" as const,
+    clienteId: null,
+    aReceber: false,
+    ...extra,
+  });
+
+  beforeAll(async () => {
+    ids.cem = await salvarProduto(db, loja.id, null, base("Produto de cem", { precoCentavos: 10_000 }), eu.id, { saldoMil: 10_000, custoCentavos: 6_000 });
+  });
+
+  it("F01: dinheiro entregue menor que o total é recusado sem gravar nada", async () => {
+    const antes = await db.select({ id: vendas.id }).from(vendas).where(eq(vendas.empresaId, loja.id));
+    await expect(registrarVendaCaixa(db, loja.id, eu.id, venda({ descontoCentavos: 2_000, valorEntregueCentavos: 1_000 }))).rejects.toThrow("Faltam R$");
+    expect(await db.select({ id: vendas.id }).from(vendas).where(eq(vendas.empresaId, loja.id))).toHaveLength(antes.length);
+    expect((await saldo(ids.cem)).s).toBe(10_000);
+  });
+
+  it("F01/F03: R$ 100 entregues numa venda de R$ 80 geram R$ 20 de troco, e a receita é R$ 80", async () => {
+    const r = await registrarVendaCaixa(db, loja.id, eu.id, venda({ descontoCentavos: 2_000, valorEntregueCentavos: 10_000 }));
+    expect(r).toMatchObject({ totalCentavos: 8_000, trocoCentavos: 2_000 });
+    const [v] = await db.select().from(vendas).where(eq(vendas.id, r.vendaId));
+    expect(v).toMatchObject({ valorCentavos: 8_000, valorEntregueCentavos: 10_000, trocoCentavos: 2_000 });
+    const [item] = await db.select().from(vendaItens).where(eq(vendaItens.vendaId, r.vendaId));
+    // O item carrega a receita líquida (R$ 80), não o preço cheio: margem de 25%, não 40%.
+    expect(item).toMatchObject({ totalCentavos: 8_000, descontoVendaCentavos: 2_000, custoTotalCentavos: 6_000 });
+    expect((await saldo(ids.cem)).s).toBe(9_000);
+  });
+
+  it("F03: desconto de 1 centavo em vários itens fecha a soma", async () => {
+    const r = await registrarVendaCaixa(
+      db,
+      loja.id,
+      eu.id,
+      venda({ itens: [ids.cem, ids.cem, ids.cem].map((produtoId) => ({ produtoId, quantidadeMil: 1_000 })), descontoCentavos: 1, formaPagamento: "pix" }),
+    );
+    const itens = await db.select().from(vendaItens).where(eq(vendaItens.vendaId, r.vendaId));
+    expect(itens.reduce((t, i) => t + i.totalCentavos, 0)).toBe(r.totalCentavos);
+    expect(r.totalCentavos).toBe(29_999);
+  });
+
+  it("F04: 20 envios da mesma chave ao mesmo tempo viram uma venda e uma baixa", async () => {
+    const antes = (await saldo(ids.cem)).s;
+    const chave = crypto.randomUUID();
+    const rs = await Promise.all(Array.from({ length: 20 }, () => registrarVendaCaixa(db, loja.id, eu.id, venda({ chave, formaPagamento: "pix" }))));
+    expect(new Set(rs.map((r) => r.vendaId)).size).toBe(1);
+    expect(await db.select().from(vendas).where(and(eq(vendas.empresaId, loja.id), eq(vendas.chaveIdempotencia, chave)))).toHaveLength(1);
+    expect((await saldo(ids.cem)).s).toBe(antes - 1_000);
+    // A resposta se perdeu e o caixa manda de novo: devolve a mesma venda, sem baixar outra vez.
+    const deNovo = await registrarVendaCaixa(db, loja.id, eu.id, venda({ chave, formaPagamento: "pix" }));
+    expect(deNovo).toMatchObject({ vendaId: rs[0].vendaId, repetida: true });
+    expect((await saldo(ids.cem)).s).toBe(antes - 1_000);
+    // Mesma chave com outro carrinho é conflito.
+    await expect(registrarVendaCaixa(db, loja.id, eu.id, venda({ chave, formaPagamento: "pix", itens: [{ produtoId: ids.cem, quantidadeMil: 2_000 }] }))).rejects.toThrow("outro carrinho");
+  });
+
+  it("F11: produto desativado, meia unidade e troca de unidade são barrados no servidor", async () => {
+    const id = await salvarProduto(db, loja.id, null, base("Some amanhã"), eu.id, { saldoMil: 5_000, custoCentavos: 100 });
+    await expect(registrarVendaCaixa(db, loja.id, eu.id, venda({ itens: [{ produtoId: id, quantidadeMil: 500 }], formaPagamento: "pix" }))).rejects.toThrow("quantidade inteira");
+    await expect(salvarProduto(db, loja.id, id, base("Some amanhã", { unidade: "kg" }), eu.id)).rejects.toThrow("unidade não muda");
+    await salvarProduto(db, loja.id, id, base("Some amanhã", { ativo: false }), eu.id);
+    await expect(registrarVendaCaixa(db, loja.id, eu.id, venda({ itens: [{ produtoId: id, quantidadeMil: 1_000 }], formaPagamento: "pix" }))).rejects.toThrow("desativado");
+    await expect(registrarPerda(db, loja.id, eu.id, id, 500, "")).rejects.toThrow("quantidade inteira");
+  });
+
+  it("F13: o cartão “Para repor” e o filtro mostram a mesma população", async () => {
+    await salvarProduto(db, loja.id, null, base("Zerado", { minimoMil: 2_000 }), eu.id);
+    const p = await painelEstoque(db, loja.id);
+    const filtro = await listarProdutos(db, loja.id, { filtro: "repor" });
+    expect(p.repor).toBe(filtro.length);
+    expect(p.repor).toBe(p.abaixoMinimo + p.semEstoque);
+    expect(await contarProdutos(db, loja.id, { filtro: "repor" })).toBe(filtro.length);
+  });
+
+  it("F12: planilha só com preço não mexe no saldo", async () => {
+    await salvarProduto(db, loja.id, ids.cem, base("Produto de cem", { precoCentavos: 10_000, sku: "CEM" }), eu.id);
+    const antes = (await saldo(ids.cem)).s;
+    const { produtos: lista, erros } = produtosDoCsv("nome;sku;preco\nProduto de cem;CEM;110,00");
+    expect(erros).toEqual([]);
+    expect(await importarProdutos(db, loja.id, eu.id, lista)).toEqual({ novos: 0, atualizados: 1 });
+    const [p] = await db.select().from(produtos).where(eq(produtos.id, ids.cem));
+    expect(p).toMatchObject({ precoCentavos: 11_000, saldoMil: antes });
   });
 });

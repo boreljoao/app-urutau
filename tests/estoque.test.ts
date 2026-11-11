@@ -8,6 +8,7 @@ import {
   margem,
   novoCustoMedio,
   produtosDoCsv,
+  ratearDesconto,
   situacao,
   sugestaoDeCompra,
   totalDoItem,
@@ -103,11 +104,32 @@ describe("importação por CSV", () => {
     ]);
     expect(r.erros).toEqual([
       { linha: 4, motivo: "sem nome" },
-      { linha: 5, motivo: 'valor inválido em "Bolo"' },
+      { linha: 5, motivo: 'valor inválido ou negativo em "Bolo"' },
     ]);
   });
 
   it("sem coluna de nome, avisa", () => {
     expect(produtosDoCsv("sku,preco\n1,2").erros[0].motivo).toContain("nome do produto");
+  });
+});
+
+describe("auditoria: contratos", () => {
+  it("rateio do desconto fecha em centavos e não passa do item", () => {
+    expect(ratearDesconto([3_780, 2_200, 400, 50], 100)).toEqual([59, 34, 6, 1]);
+    expect(ratearDesconto([1, 1, 1], 1).reduce((a, b) => a + b, 0)).toBe(1);
+    expect(ratearDesconto([100, 50], 1_000)).toEqual([100, 50]);
+    expect(ratearDesconto([100, 50], 0)).toEqual([0, 0]);
+    for (let d = 0; d <= 333; d += 37) expect(ratearDesconto([111, 111, 111], d).reduce((a, b) => a + b, 0)).toBe(d);
+  });
+
+  it("CSV recusa preço negativo, fração em unidade inteira e unidade desconhecida", () => {
+    expect(produtosDoCsv("nome;preco;estoque\nQA;-5;2").erros.length).toBeGreaterThan(0);
+    expect(produtosDoCsv("nome;preco;estoque;unidade\nQA;5;1,5;un").erros.length).toBeGreaterThan(0);
+    expect(produtosDoCsv("nome;preco;estoque;unidade\nQA;5;1;litrosx").erros.length).toBeGreaterThan(0);
+  });
+
+  it("CSV sem coluna de estoque não vira zero; zero escrito vale zero", () => {
+    expect(produtosDoCsv("nome;sku;preco\nQA;ABC;5").produtos[0].saldoMil).toBeUndefined();
+    expect(produtosDoCsv("nome;sku;preco;estoque\nQA;ABC;5;0").produtos[0].saldoMil).toBe(0);
   });
 });

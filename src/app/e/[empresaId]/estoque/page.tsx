@@ -57,7 +57,7 @@ export default async function Estoque({ params }: { params: Promise<{ empresaId:
         <div>
           <h1 className="font-titulo text-2xl font-bold">Estoque</h1>
           <p className="text-sm text-suave">
-            {p.produtosAtivos} produtos · {p.repor + p.semEstoque > 0 ? `${p.repor + p.semEstoque} pedem atenção` : "nada faltando"}
+            {p.produtosAtivos} produtos · {p.repor > 0 ? `${p.repor} pedem atenção` : "nada faltando"}
           </p>
         </div>
         {lancar && <Link href={`${base}/caixa`} className="btn-principal !min-h-11">Abrir o caixa</Link>}
@@ -93,11 +93,11 @@ export default async function Estoque({ params }: { params: Promise<{ empresaId:
           <dd className={`numero mt-1 text-xl font-bold ${m != null && m < 20 ? "text-negativo" : ""}`}>{m == null ? "–" : `${m.toLocaleString("pt-BR")}%`}</dd>
           <dd className="text-xs text-suave">lucro de {formatarReais(p.vendas30d.receita - p.vendas30d.custo)} sobre o custo</dd>
         </div>
-        <div className={`cartao ${p.repor + p.semEstoque > 0 ? "!border-destaque/70" : ""}`}>
+        <div className={`cartao ${p.repor > 0 ? "!border-destaque/70" : ""}`}>
           <dt className="text-xs text-suave">Repor</dt>
-          <dd className="numero mt-1 text-xl font-bold">{p.repor + p.semEstoque}</dd>
+          <dd className="numero mt-1 text-xl font-bold">{p.repor}</dd>
           <dd className="text-xs text-suave">
-            {p.semEstoque} zerados{p.negativos ? ` (${p.negativos} negativos)` : ""} · {p.repor} abaixo do mínimo
+            {p.semEstoque} zerados{p.negativos ? ` (${p.negativos} negativos)` : ""} · {p.abaixoMinimo} abaixo do mínimo
           </dd>
         </div>
       </dl>

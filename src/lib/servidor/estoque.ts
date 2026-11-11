@@ -1,9 +1,11 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { BancoDeDados } from "@/db";
 import { categoriasDespesa, clientes, despesas, fontesReceita, movimentosEstoque, produtos, vendaItens, vendas, type FormaPagamento, type TipoMovimento, type Unidade } from "@/db/schema";
 import { hoje, somarDias } from "@/lib/datas";
-import { MIL, curvaABC, novoCustoMedio, situacao, sugestaoDeCompra, totalDoItem, valorEmEstoque, type ProdutoImportado } from "@/lib/estoque";
+import { formatarReais } from "@/lib/dinheiro";
+import { MIL, UNIDADES, curvaABC, custoDaQuantidade, novoCustoMedio, quantidadeCabe, ratearDesconto, situacao, sugestaoDeCompra, totalDoItem, valorEmEstoque, type ProdutoImportado } from "@/lib/estoque";
 import { registrarAuditoria } from "./auditoria";
 
 /**
@@ -35,6 +37,9 @@ async function movimentar(tx: Tx, m: Movimento) {
     .where(and(eq(produtos.id, m.produtoId), eq(produtos.empresaId, m.empresaId), isNull(produtos.excluidoEm)))
     .for("update");
   if (!p) throw new ErroEstoque("Produto não encontrado.");
+  // A unidade vem do cadastro, não de quem chamou: "un" não anda em meia unidade.
+  if (m.tipo !== "ajuste" && !quantidadeCabe(Math.abs(m.quantidadeMil), p.unidade))
+    throw new ErroEstoque(`${p.nome} é vendido em ${UNIDADES[p.unidade].nome.toLowerCase()}: use quantidade inteira.`);
   const saldo = p.saldoMil + m.quantidadeMil;
   const custo =
     m.tipo === "entrada" && m.custoUnitarioCentavos != null ? novoCustoMedio(p.saldoMil, p.custoMedioCentavos, m.quantidadeMil, m.custoUnitarioCentavos) : p.custoMedioCentavos;
@@ -92,6 +97,16 @@ export async function salvarProduto(
   try {
     return await db.transaction(async (tx) => {
       if (id) {
+        const [atual] = await tx
+          .select({ unidade: produtos.unidade })
+          .from(produtos)
+          .where(and(eq(produtos.id, id), eq(produtos.empresaId, empresaId), isNull(produtos.excluidoEm)))
+          .for("update");
+        if (!atual) throw new ErroEstoque("Produto não encontrado.");
+        if (atual.unidade !== dados.unidade) {
+          const [mov] = await tx.select({ id: movimentosEstoque.id }).from(movimentosEstoque).where(and(eq(movimentosEstoque.empresaId, empresaId), eq(movimentosEstoque.produtoId, id))).limit(1);
+          if (mov) throw new ErroEstoque("A unidade não muda depois que o produto já teve entrada ou venda. Cadastre outro produto para a nova unidade.");
+        }
         const [p] = await tx
           .update(produtos)
           .set({ ...dados, atualizadoEm: new Date() })
@@ -125,9 +140,37 @@ const vendidoNoPeriodo = (dias: number) => sql<number>`(
   select coalesce(sum(vi.quantidade_mil), 0)::bigint from ${vendaItens} vi join ${vendas} v on v.id = vi.venda_id
   where vi.produto_id = "produtos"."id" and vi.empresa_id = "produtos"."empresa_id" and v.excluido_em is null and v.data >= ${somarDias(hoje(), -dias)})`;
 
-export async function listarProdutos(db: BancoDeDados, empresaId: string, o: { busca?: string; filtro?: FiltroProdutos; categoria?: string } = {}) {
+function filtroDeProdutos(empresaId: string, o: { busca?: string; filtro?: FiltroProdutos; categoria?: string }) {
   const termo = o.busca?.trim() ?? "";
   const filtro = o.filtro ?? "todos";
+  return and(
+    eq(produtos.empresaId, empresaId),
+    isNull(produtos.excluidoEm),
+    filtro === "inativos" ? eq(produtos.ativo, false) : eq(produtos.ativo, true),
+    // "Para repor" = abaixo do mínimo ou sem estoque: o mesmo número que o cartão mostra.
+    filtro === "repor" ? sql`${produtos.controlaEstoque} and (${produtos.saldoMil} <= 0 or (${produtos.minimoMil} > 0 and ${produtos.saldoMil} <= ${produtos.minimoMil}))` : undefined,
+    filtro === "sem_estoque" ? sql`${produtos.controlaEstoque} and ${produtos.saldoMil} <= 0` : undefined,
+    filtro === "parados" ? sql`${produtos.saldoMil} > 0 and (${produtos.ultimaVendaEm} is null or ${produtos.ultimaVendaEm} < now() - interval '60 days')` : undefined,
+    o.categoria ? eq(produtos.categoria, o.categoria) : undefined,
+    termo ? or(ilike(produtos.nome, `%${termo}%`), eq(produtos.codigoBarras, termo), ilike(produtos.sku, `${termo}%`)) : undefined,
+  );
+}
+
+export const PRODUTOS_POR_PAGINA = 200;
+
+/** Quantos produtos o filtro acha (para "mostrando 200 de 1.340"). */
+export async function contarProdutos(db: BancoDeDados, empresaId: string, o: { busca?: string; filtro?: FiltroProdutos; categoria?: string } = {}) {
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(produtos).where(filtroDeProdutos(empresaId, o));
+  return r.n;
+}
+
+export async function listarProdutos(
+  db: BancoDeDados,
+  empresaId: string,
+  o: { busca?: string; filtro?: FiltroProdutos; categoria?: string; pagina?: number; porPagina?: number } = {},
+) {
+  const porPagina = Math.min(Math.max(o.porPagina ?? PRODUTOS_POR_PAGINA, 1), 500);
+  const pagina = Math.max(1, Math.floor(o.pagina ?? 1));
   const linhas = await db
     .select({
       id: produtos.id,
@@ -146,22 +189,10 @@ export async function listarProdutos(db: BancoDeDados, empresaId: string, o: { b
       vendido30dMil: vendidoNoPeriodo(30),
     })
     .from(produtos)
-    .where(
-      and(
-        eq(produtos.empresaId, empresaId),
-        isNull(produtos.excluidoEm),
-        filtro === "inativos" ? eq(produtos.ativo, false) : eq(produtos.ativo, true),
-        filtro === "repor" ? sql`${produtos.controlaEstoque} and ${produtos.saldoMil} <= ${produtos.minimoMil}` : undefined,
-        filtro === "sem_estoque" ? sql`${produtos.controlaEstoque} and ${produtos.saldoMil} <= 0` : undefined,
-        filtro === "parados"
-          ? sql`${produtos.saldoMil} > 0 and (${produtos.ultimaVendaEm} is null or ${produtos.ultimaVendaEm} < now() - interval '60 days')`
-          : undefined,
-        o.categoria ? eq(produtos.categoria, o.categoria) : undefined,
-        termo ? or(ilike(produtos.nome, `%${termo}%`), eq(produtos.codigoBarras, termo), ilike(produtos.sku, `${termo}%`)) : undefined,
-      ),
-    )
-    .orderBy(asc(produtos.nome))
-    .limit(500);
+    .where(filtroDeProdutos(empresaId, o))
+    .orderBy(asc(produtos.nome), asc(produtos.id))
+    .limit(porPagina)
+    .offset((pagina - 1) * porPagina);
   return linhas.map((l) => ({ ...l, vendido30dMil: Number(l.vendido30dMil), situacao: situacao(l) }));
 }
 
@@ -188,7 +219,7 @@ export async function obterProduto(db: BancoDeDados, empresaId: string, id: stri
       .select({
         quantidade: sql<number>`coalesce(sum(${vendaItens.quantidadeMil}), 0)::bigint`,
         receita: sql<number>`coalesce(sum(${vendaItens.totalCentavos}), 0)::bigint`,
-        custo: sql<number>`coalesce(sum(${vendaItens.custoUnitarioCentavos} * ${vendaItens.quantidadeMil} / 1000), 0)::bigint`,
+        custo: sql<number>`coalesce(sum(${vendaItens.custoTotalCentavos}), 0)::bigint`,
       })
       .from(vendaItens)
       .innerJoin(vendas, eq(vendas.id, vendaItens.vendaId))
@@ -231,9 +262,35 @@ export async function produtosDoCaixa(db: BancoDeDados, empresaId: string) {
     })
     .from(produtos)
     .where(and(eq(produtos.empresaId, empresaId), isNull(produtos.excluidoEm), eq(produtos.ativo, true)))
-    .orderBy(asc(produtos.nome))
-    .limit(2000);
-  return linhas.map((l) => ({ ...l, vendido30dMil: Number(l.vendido30dMil) })).sort((a, b) => b.vendido30dMil - a.vendido30dMil || a.nome.localeCompare(b.nome, "pt-BR"));
+    .orderBy(desc(vendidoNoPeriodo(30)), asc(produtos.nome), asc(produtos.id))
+    .limit(LIMITE_CAIXA);
+  return linhas.map((l) => ({ ...l, vendido30dMil: Number(l.vendido30dMil) }));
+}
+
+/** O caixa carrega os que mais saem; o resto do catálogo é buscado no servidor (buscarNoCaixa). */
+export const LIMITE_CAIXA = 400;
+
+/** Busca do caixa no catálogo inteiro: código exato (EAN/SKU) primeiro, depois pelo nome. */
+export async function buscarNoCaixa(db: BancoDeDados, empresaId: string, termo: string) {
+  const t = termo.trim().slice(0, 80);
+  if (!t) return [];
+  return db
+    .select({
+      id: produtos.id,
+      nome: produtos.nome,
+      codigoBarras: produtos.codigoBarras,
+      sku: produtos.sku,
+      categoria: produtos.categoria,
+      unidade: produtos.unidade,
+      precoCentavos: produtos.precoCentavos,
+      saldoMil: produtos.saldoMil,
+      controlaEstoque: produtos.controlaEstoque,
+      vendido30dMil: sql<number>`0`.mapWith(Number),
+    })
+    .from(produtos)
+    .where(and(eq(produtos.empresaId, empresaId), isNull(produtos.excluidoEm), eq(produtos.ativo, true), or(eq(produtos.codigoBarras, t), eq(produtos.sku, t), ilike(produtos.nome, `%${t}%`))))
+    .orderBy(sql`(${produtos.codigoBarras} = ${t} or ${produtos.sku} = ${t}) desc`, asc(produtos.nome))
+    .limit(30);
 }
 
 // ─── Movimentos da equipe ────────────────────────────────────────────────────
@@ -336,16 +393,79 @@ export interface VendaDoCaixa {
   clienteId: string | null;
   /** Fiado: fica a receber no financeiro. */
   aReceber: boolean;
+  /** Dinheiro: quanto o cliente entregou. Vazio = o valor exato. Menos que o total é recusado. */
+  valorEntregueCentavos?: number | null;
+  /** Uma por carrinho, gerada no navegador: repetir o envio devolve a mesma venda. */
+  chave?: string | null;
 }
+
+export interface VendaFeita {
+  vendaId: string;
+  totalCentavos: number;
+  trocoCentavos: number | null;
+  estoqueNegativo: string[];
+  /** true quando a chave já tinha sido usada: nada novo foi gravado. */
+  repetida?: boolean;
+}
+
+function hashDoPedido(v: VendaDoCaixa) {
+  const resumo = {
+    i: v.itens.map((i) => [i.produtoId, i.produtoId ? null : (i.descricao?.trim() ?? null), i.quantidadeMil, i.produtoId ? null : (i.precoUnitarioCentavos ?? 0), i.descontoCentavos ?? 0]),
+    d: v.descontoCentavos,
+    f: v.formaPagamento,
+    c: v.clienteId,
+    r: v.aReceber,
+    e: v.valorEntregueCentavos ?? null,
+  };
+  return createHash("sha256").update(JSON.stringify(resumo)).digest("hex");
+}
+
+async function vendaDaChave(db: BancoDeDados | Tx, empresaId: string, chave: string, hash: string): Promise<VendaFeita | null> {
+  const [v] = await db
+    .select({ id: vendas.id, valor: vendas.valorCentavos, hash: vendas.pedidoHash, troco: vendas.trocoCentavos })
+    .from(vendas)
+    .where(and(eq(vendas.empresaId, empresaId), eq(vendas.chaveIdempotencia, chave)));
+  if (!v) return null;
+  if (v.hash !== hash) throw new ErroEstoque("Esta venda já foi registrada com outro carrinho. Recarregue o caixa antes de continuar.");
+  return { vendaId: v.id, totalCentavos: v.valor, trocoCentavos: v.troco, estoqueNegativo: [], repetida: true };
+}
+
+const restricaoDe = (e: unknown) => {
+  for (let c: unknown = e; c; c = (c as { cause?: unknown }).cause) {
+    const nome = (c as { constraint_name?: string }).constraint_name;
+    if (nome) return nome;
+  }
+  return null;
+};
 
 /**
  * Fecha uma venda do caixa: preço vem do cadastro (não do navegador), baixa o estoque de quem
  * controla, grava os itens com o custo do momento e lança a venda no financeiro já conferida.
  */
-export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, usuarioId: string, v: VendaDoCaixa) {
+export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, usuarioId: string, v: VendaDoCaixa): Promise<VendaFeita> {
   if (!v.itens.length) throw new ErroEstoque("O carrinho está vazio.");
-  if (v.itens.some((i) => i.quantidadeMil <= 0)) throw new ErroEstoque("Quantidade inválida no carrinho.");
+  if (v.itens.some((i) => !Number.isSafeInteger(i.quantidadeMil) || i.quantidadeMil <= 0)) throw new ErroEstoque("Quantidade inválida no carrinho.");
   if (v.aReceber && !v.clienteId) throw new ErroEstoque("Venda fiado precisa de cliente.");
+  if (v.valorEntregueCentavos != null && (!Number.isSafeInteger(v.valorEntregueCentavos) || v.valorEntregueCentavos < 0)) throw new ErroEstoque("Valor entregue inválido.");
+  const chave = v.chave?.trim() || null;
+  const hash = chave ? hashDoPedido(v) : null;
+  if (chave && hash) {
+    const anterior = await vendaDaChave(db, empresaId, chave, hash);
+    if (anterior) return anterior;
+  }
+  try {
+    return await gravarVendaCaixa(db, empresaId, usuarioId, v, chave, hash);
+  } catch (e) {
+    // Dois envios da mesma chave ao mesmo tempo: o segundo esbarra no índice único e devolve o primeiro.
+    if (chave && hash && restricaoDe(e) === "vendas_chave_uq") {
+      const anterior = await vendaDaChave(db, empresaId, chave, hash);
+      if (anterior) return anterior;
+    }
+    throw e;
+  }
+}
+
+async function gravarVendaCaixa(db: BancoDeDados, empresaId: string, usuarioId: string, v: VendaDoCaixa, chave: string | null, hash: string | null): Promise<VendaFeita> {
   return db.transaction(async (tx) => {
     const ids = [...new Set(v.itens.flatMap((i) => (i.produtoId ? [i.produtoId] : [])))];
     const cadastro = ids.length
@@ -355,15 +475,30 @@ export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, u
     const linhas = v.itens.map((i) => {
       const p = i.produtoId ? porId.get(i.produtoId) : null;
       if (i.produtoId && !p) throw new ErroEstoque("Um produto do carrinho não existe mais.");
+      if (p && !p.ativo) throw new ErroEstoque(`${p.nome} foi desativado e não pode ser vendido. Tire do carrinho.`);
+      if (p && !quantidadeCabe(i.quantidadeMil, p.unidade)) throw new ErroEstoque(`${p.nome} é vendido em ${UNIDADES[p.unidade].nome.toLowerCase()}: use quantidade inteira.`);
       const descricao = p?.nome ?? i.descricao?.trim();
       const preco = p?.precoCentavos ?? i.precoUnitarioCentavos ?? 0;
       if (!descricao) throw new ErroEstoque("Item avulso precisa de descrição.");
       const desconto = Math.min(i.descontoCentavos ?? 0, totalDoItem(i.quantidadeMil, preco));
       return { p, descricao, quantidadeMil: i.quantidadeMil, preco, desconto, total: totalDoItem(i.quantidadeMil, preco, desconto) };
     });
-    const bruto = linhas.reduce((s, l) => s + l.total, 0);
-    const total = bruto - Math.min(v.descontoCentavos, bruto);
+    // O desconto da venda inteira é repartido entre os itens: a soma dos itens é o total da venda.
+    const partes = ratearDesconto(
+      linhas.map((l) => l.total),
+      v.descontoCentavos,
+    );
+    const total = linhas.reduce((s, l, k) => s + l.total - partes[k], 0);
     if (total <= 0) throw new ErroEstoque("O total da venda precisa ser maior que zero.");
+
+    // Dinheiro: o que o cliente entregou precisa cobrir a venda. Troco não é receita.
+    let entregue: number | null = null;
+    let trocoVenda: number | null = null;
+    if (v.formaPagamento === "dinheiro" && !v.aReceber) {
+      entregue = v.valorEntregueCentavos ?? total;
+      if (entregue < total) throw new ErroEstoque(`O cliente entregou ${formatarReais(entregue)} e a venda é ${formatarReais(total)}. Faltam ${formatarReais(total - entregue)}.`);
+      trocoVenda = entregue - total;
+    }
 
     if (v.clienteId) {
       const [c] = await tx.select({ id: clientes.id }).from(clientes).where(and(eq(clientes.id, v.clienteId), eq(clientes.empresaId, empresaId), isNull(clientes.excluidoEm)));
@@ -392,12 +527,20 @@ export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, u
         dataRecebimento: v.aReceber ? somarDias(dia, 30) : dia,
         clienteId: v.clienteId,
         origem: "balcao",
+        chaveIdempotencia: chave,
+        pedidoHash: hash,
+        valorEntregueCentavos: entregue,
+        trocoCentavos: trocoVenda,
         criadoPor: usuarioId,
       })
       .returning({ id: vendas.id });
 
+    // Baixa na ordem dos ids: dois caixas com carrinhos parecidos travam os produtos na mesma
+    // ordem e não ficam um esperando o outro.
     const alertas: string[] = [];
-    for (const l of linhas) {
+    const custos = new Map<number, number>();
+    const ordem = linhas.map((l, k) => ({ l, k })).sort((a, b) => (a.l.p?.id ?? "").localeCompare(b.l.p?.id ?? ""));
+    for (const { l, k } of ordem) {
       let custo = l.p?.custoMedioCentavos ?? 0;
       if (l.p?.controlaEstoque) {
         const r = await movimentar(tx, { empresaId, produtoId: l.p.id, tipo: "venda", quantidadeMil: -l.quantidadeMil, vendaId: venda.id, usuarioId });
@@ -406,7 +549,10 @@ export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, u
       } else if (l.p) {
         await tx.update(produtos).set({ ultimaVendaEm: new Date() }).where(eq(produtos.id, l.p.id));
       }
-      await tx.insert(vendaItens).values({
+      custos.set(k, custo);
+    }
+    await tx.insert(vendaItens).values(
+      linhas.map((l, k) => ({
         empresaId,
         vendaId: venda.id,
         produtoId: l.p?.id ?? null,
@@ -414,11 +560,13 @@ export async function registrarVendaCaixa(db: BancoDeDados, empresaId: string, u
         quantidadeMil: l.quantidadeMil,
         precoUnitarioCentavos: l.preco,
         descontoCentavos: l.desconto,
-        totalCentavos: l.total,
-        custoUnitarioCentavos: custo,
-      });
-    }
-    return { vendaId: venda.id, totalCentavos: total, estoqueNegativo: alertas };
+        descontoVendaCentavos: partes[k],
+        totalCentavos: l.total - partes[k],
+        custoUnitarioCentavos: custos.get(k) ?? 0,
+        custoTotalCentavos: custoDaQuantidade(l.quantidadeMil, custos.get(k) ?? 0),
+      })),
+    );
+    return { vendaId: venda.id, totalCentavos: total, trocoCentavos: trocoVenda, estoqueNegativo: alertas };
   });
 }
 
@@ -450,6 +598,7 @@ export async function caixaDoDia(db: BancoDeDados, empresaId: string, dia = hoje
       descricao: vendas.descricao,
       formaPagamento: vendas.formaPagamento,
       status: vendas.status,
+      trocoCentavos: vendas.trocoCentavos,
       criadoEm: vendas.criadoEm,
       // Sem join, o Drizzle escreve a coluna sem o nome da tabela: dentro da subconsulta ela seria a de `vi`.
       itens: sql<number>`(select count(*)::int from ${vendaItens} vi where vi.venda_id = "vendas"."id")`,
@@ -457,10 +606,29 @@ export async function caixaDoDia(db: BancoDeDados, empresaId: string, dia = hoje
     .from(vendas)
     .where(and(eq(vendas.empresaId, empresaId), eq(vendas.origem, "balcao"), eq(vendas.data, dia), isNull(vendas.excluidoEm)))
     .orderBy(desc(vendas.criadoEm));
+  // Vendido ≠ recebido: fiado entra no faturamento do dia, mas não no que entrou no caixa.
   const porForma = new Map<FormaPagamento, number>();
-  for (const v of lista) porForma.set(v.formaPagamento, (porForma.get(v.formaPagamento) ?? 0) + v.valor);
+  let recebido = 0;
+  let aReceber = 0;
+  for (const v of lista) {
+    if (v.status === "a_receber") {
+      aReceber += v.valor;
+      continue;
+    }
+    recebido += v.valor;
+    porForma.set(v.formaPagamento, (porForma.get(v.formaPagamento) ?? 0) + v.valor);
+  }
   const total = lista.reduce((s, v) => s + v.valor, 0);
-  return { lista, total, porForma: [...porForma].sort((a, b) => b[1] - a[1]), ticketMedio: lista.length ? Math.round(total / lista.length) : 0 };
+  return {
+    lista,
+    /** Tudo o que foi vendido no dia (inclui fiado). */
+    total,
+    /** O que foi pago na hora, por forma (pix/cartão registrados aqui não são confirmação do banco). */
+    recebido,
+    aReceber,
+    porForma: [...porForma].sort((a, b) => b[1] - a[1]),
+    ticketMedio: lista.length ? Math.round(total / lista.length) : 0,
+  };
 }
 
 export async function itensDaVenda(db: BancoDeDados, empresaId: string, vendaId: string) {
@@ -484,18 +652,28 @@ export async function importarProdutos(db: BancoDeDados, empresaId: string, usua
             .limit(1)
         : [];
       if (existente) {
+        if (i.unidade && i.unidade !== existente.unidade)
+          throw new ErroEstoque(`“${existente.nome}” está cadastrado em ${existente.unidade} e a planilha diz ${i.unidade}. Corrija a planilha.`);
+        // Campo que não veio fica como está; zero só quando a planilha diz zero.
         await tx
           .update(produtos)
-          .set({ nome: i.nome, categoria: i.categoria || existente.categoria, precoCentavos: i.precoCentavos || existente.precoCentavos, minimoMil: i.minimoMil || existente.minimoMil, atualizadoEm: new Date() })
+          .set({
+            nome: i.nome,
+            categoria: i.categoria ?? existente.categoria,
+            precoCentavos: i.precoCentavos ?? existente.precoCentavos,
+            minimoMil: i.minimoMil ?? existente.minimoMil,
+            atualizadoEm: new Date(),
+          })
           .where(eq(produtos.id, existente.id));
-        const diferenca = i.saldoMil - existente.saldoMil;
+        // Planilha sem a coluna de estoque (só preços, por exemplo) não mexe no saldo.
+        const diferenca = i.saldoMil === undefined ? 0 : i.saldoMil - existente.saldoMil;
         if (diferenca !== 0)
           await movimentar(tx, {
             empresaId,
             produtoId: existente.id,
-            tipo: diferenca > 0 && i.custoCentavos ? "entrada" : "ajuste",
+            tipo: diferenca > 0 && i.custoCentavos != null ? "entrada" : "ajuste",
             quantidadeMil: diferenca,
-            custoUnitarioCentavos: diferenca > 0 && i.custoCentavos ? i.custoCentavos : null,
+            custoUnitarioCentavos: diferenca > 0 && i.custoCentavos != null ? i.custoCentavos : null,
             observacao: "Importação de planilha",
             usuarioId,
           });
@@ -509,16 +687,16 @@ export async function importarProdutos(db: BancoDeDados, empresaId: string, usua
           nome: i.nome,
           sku: i.sku,
           codigoBarras: i.codigoBarras,
-          categoria: i.categoria,
-          unidade: i.unidade,
-          precoCentavos: i.precoCentavos,
-          custoMedioCentavos: i.custoCentavos,
-          minimoMil: i.minimoMil,
+          categoria: i.categoria ?? "",
+          unidade: i.unidade ?? "un",
+          precoCentavos: i.precoCentavos ?? 0,
+          custoMedioCentavos: i.custoCentavos ?? 0,
+          minimoMil: i.minimoMil ?? 0,
           criadoPor: usuarioId,
         })
         .returning({ id: produtos.id });
-      if (i.saldoMil > 0)
-        await movimentar(tx, { empresaId, produtoId: p.id, tipo: "entrada", quantidadeMil: i.saldoMil, custoUnitarioCentavos: i.custoCentavos, observacao: "Importação de planilha", usuarioId });
+      if (i.saldoMil && i.saldoMil > 0)
+        await movimentar(tx, { empresaId, produtoId: p.id, tipo: "entrada", quantidadeMil: i.saldoMil, custoUnitarioCentavos: i.custoCentavos ?? 0, observacao: "Importação de planilha", usuarioId });
       novos++;
     }
   });
@@ -529,20 +707,58 @@ export async function importarProdutos(db: BancoDeDados, empresaId: string, usua
 
 /** Tudo o que o dono precisa ver do estoque numa tela: valor parado, o que repor, o que gira e a margem. */
 export async function painelEstoque(db: BancoDeDados, empresaId: string) {
-  const lista = await listarProdutos(db, empresaId);
   const desde90 = somarDias(hoje(), -90);
   const desde30 = somarDias(hoje(), -30);
-  const [vendidos90, [r30], recentes] = await Promise.all([
+  const ativos = and(eq(produtos.empresaId, empresaId), isNull(produtos.excluidoEm), eq(produtos.ativo, true));
+  const controlado = sql`${produtos.controlaEstoque} and ${produtos.saldoMil}`;
+  const parado = sql`${produtos.controlaEstoque} and ${produtos.saldoMil} > 0 and (${produtos.ultimaVendaEm} is null or ${produtos.ultimaVendaEm} < now() - interval '60 days')`;
+  const colunas = {
+    id: produtos.id,
+    nome: produtos.nome,
+    sku: produtos.sku,
+    codigoBarras: produtos.codigoBarras,
+    categoria: produtos.categoria,
+    unidade: produtos.unidade,
+    precoCentavos: produtos.precoCentavos,
+    custoMedioCentavos: produtos.custoMedioCentavos,
+    saldoMil: produtos.saldoMil,
+    minimoMil: produtos.minimoMil,
+    controlaEstoque: produtos.controlaEstoque,
+    ativo: produtos.ativo,
+    ultimaVendaEm: produtos.ultimaVendaEm,
+    vendido30dMil: vendidoNoPeriodo(30),
+  };
+  const comoLinha = <T extends { saldoMil: number; minimoMil: number; controlaEstoque: boolean; vendido30dMil: number }>(l: T) => ({
+    ...l,
+    vendido30dMil: Number(l.vendido30dMil),
+    situacao: situacao(l),
+  });
+
+  // Totais em SQL, sobre o catálogo inteiro (não sobre uma página da lista).
+  const [[t], vendidos90, [r30], recentes, paradosTop, candidatos] = await Promise.all([
     db
-      .select({ produtoId: vendaItens.produtoId, receita: sql<number>`sum(${vendaItens.totalCentavos})::bigint`, quantidade: sql<number>`sum(${vendaItens.quantidadeMil})::bigint` })
+      .select({
+        ativos: sql<number>`count(*)::int`,
+        valorEmCusto: sql<number>`coalesce(sum(round(${produtos.saldoMil}::numeric * ${produtos.custoMedioCentavos} / 1000)) filter (where ${controlado} > 0), 0)::bigint`.mapWith(Number),
+        valorEmVenda: sql<number>`coalesce(sum(round(${produtos.saldoMil}::numeric * ${produtos.precoCentavos} / 1000)) filter (where ${controlado} > 0), 0)::bigint`.mapWith(Number),
+        abaixoMinimo: sql<number>`(count(*) filter (where ${controlado} > 0 and ${produtos.minimoMil} > 0 and ${produtos.saldoMil} <= ${produtos.minimoMil}))::int`,
+        semEstoque: sql<number>`(count(*) filter (where ${controlado} <= 0))::int`,
+        negativos: sql<number>`(count(*) filter (where ${controlado} < 0))::int`,
+        valorParado: sql<number>`coalesce(sum(round(${produtos.saldoMil}::numeric * ${produtos.custoMedioCentavos} / 1000)) filter (where ${parado}), 0)::bigint`.mapWith(Number),
+      })
+      .from(produtos)
+      .where(ativos),
+    db
+      .select({ produtoId: vendaItens.produtoId, receita: sql<number>`sum(${vendaItens.totalCentavos})::bigint`.mapWith(Number) })
       .from(vendaItens)
       .innerJoin(vendas, eq(vendas.id, vendaItens.vendaId))
-      .where(and(eq(vendaItens.empresaId, empresaId), isNull(vendas.excluidoEm), gte(vendas.data, desde90)))
+      .innerJoin(produtos, and(eq(produtos.id, vendaItens.produtoId), eq(produtos.empresaId, vendaItens.empresaId)))
+      .where(and(eq(vendaItens.empresaId, empresaId), isNull(vendas.excluidoEm), gte(vendas.data, desde90), isNull(produtos.excluidoEm), eq(produtos.ativo, true)))
       .groupBy(vendaItens.produtoId),
     db
       .select({
         receita: sql<number>`coalesce(sum(${vendaItens.totalCentavos}), 0)::bigint`,
-        custo: sql<number>`coalesce(sum(${vendaItens.custoUnitarioCentavos} * ${vendaItens.quantidadeMil} / 1000), 0)::bigint`,
+        custo: sql<number>`coalesce(sum(${vendaItens.custoTotalCentavos}), 0)::bigint`,
         vendas: sql<number>`count(distinct ${vendaItens.vendaId})::int`,
       })
       .from(vendaItens)
@@ -564,38 +780,57 @@ export async function painelEstoque(db: BancoDeDados, empresaId: string) {
       .where(and(eq(movimentosEstoque.empresaId, empresaId), lt(movimentosEstoque.criadoEm, sql`now() + interval '1 minute'`)))
       .orderBy(desc(movimentosEstoque.criadoEm))
       .limit(12),
+    db
+      .select(colunas)
+      .from(produtos)
+      .where(and(ativos, parado))
+      .orderBy(sql`${produtos.saldoMil}::numeric * ${produtos.custoMedioCentavos} desc`, asc(produtos.id))
+      .limit(8),
+    // Para a sugestão de compra: quem está no mínimo ou abaixo, e quem vende (pode acabar logo).
+    db
+      .select(colunas)
+      .from(produtos)
+      .where(and(ativos, sql`${produtos.controlaEstoque} and (${produtos.saldoMil} <= ${produtos.minimoMil} or ${produtos.saldoMil} <= 0 or ${vendidoNoPeriodo(30)} > 0)`))
+      .orderBy(asc(produtos.saldoMil), asc(produtos.id))
+      .limit(1000),
   ]);
-  const receita90 = new Map(vendidos90.flatMap((v) => (v.produtoId ? [[v.produtoId, Number(v.receita)] as const] : [])));
-  const abc = curvaABC(lista.map((p) => ({ id: p.id, receita: receita90.get(p.id) ?? 0 })));
-  const controlados = lista.filter((p) => p.controlaEstoque);
-  const agora = Date.now();
-  const parados = controlados
-    .filter((p) => p.saldoMil > 0 && (!p.ultimaVendaEm || agora - p.ultimaVendaEm.getTime() > 60 * 86_400_000))
-    .map((p) => ({ ...p, valorParado: valorEmEstoque(p.saldoMil, p.custoMedioCentavos) }))
-    .sort((a, b) => b.valorParado - a.valorParado);
-  const comprar = controlados
+
+  const receita90 = new Map(vendidos90.flatMap((v) => (v.produtoId ? [[v.produtoId, v.receita] as const] : [])));
+  const abc = curvaABC([...receita90].map(([id, receita]) => ({ id, receita })));
+  const contagemAbc = { A: 0, B: 0, C: 0 };
+  for (const c of abc.values()) contagemAbc[c]++;
+  // Quem não vendeu em 90 dias é C.
+  contagemAbc.C += Math.max(0, t.ativos - abc.size);
+
+  const topo = [...receita90].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const dosTopo = topo.length ? await db.select(colunas).from(produtos).where(and(ativos, inArray(produtos.id, topo.map(([id]) => id)))) : [];
+  const porId = new Map(dosTopo.map((p) => [p.id, comoLinha(p)]));
+  const maisVendidos = topo.flatMap(([id, receita]) => {
+    const p = porId.get(id);
+    return p ? [{ ...p, receita90: receita, classe: abc.get(id) ?? "C" }] : [];
+  });
+
+  const comprar = candidatos
+    .map(comoLinha)
     .map((p) => ({ ...p, comprarMil: sugestaoDeCompra(p), cobertura: p.vendido30dMil > 0 ? Math.floor(Math.max(0, p.saldoMil) / (p.vendido30dMil / 30)) : null }))
     .filter((p) => p.comprarMil > 0 && (p.situacao !== "ok" || (p.cobertura != null && p.cobertura < 15)))
     .sort((a, b) => (a.cobertura ?? 999) - (b.cobertura ?? 999) || a.saldoMil - b.saldoMil);
-  const maisVendidos = lista
-    .filter((p) => (receita90.get(p.id) ?? 0) > 0)
-    .map((p) => ({ ...p, receita90: receita90.get(p.id) ?? 0, classe: abc.get(p.id) ?? "C" }))
-    .sort((a, b) => b.receita90 - a.receita90);
-  const contagemAbc = { A: 0, B: 0, C: 0 };
-  for (const p of lista) contagemAbc[abc.get(p.id) ?? "C"]++;
 
   return {
-    produtosAtivos: lista.length,
-    valorEmCusto: controlados.reduce((s, p) => s + valorEmEstoque(p.saldoMil, p.custoMedioCentavos), 0),
-    valorEmVenda: controlados.reduce((s, p) => s + valorEmEstoque(p.saldoMil, p.precoCentavos), 0),
-    repor: controlados.filter((p) => p.situacao === "abaixo_minimo").length,
-    semEstoque: controlados.filter((p) => p.situacao === "sem_estoque" || p.situacao === "negativo").length,
-    negativos: controlados.filter((p) => p.situacao === "negativo").length,
+    produtosAtivos: t.ativos,
+    valorEmCusto: t.valorEmCusto,
+    valorEmVenda: t.valorEmVenda,
+    /** Para repor = abaixo do mínimo + sem estoque (o mesmo que o filtro "Para repor"). */
+    repor: t.abaixoMinimo + t.semEstoque,
+    abaixoMinimo: t.abaixoMinimo,
+    /** Zerados e negativos. */
+    semEstoque: t.semEstoque,
+    negativos: t.negativos,
     vendas30d: { receita: Number(r30.receita), custo: Number(r30.custo), vendas: r30.vendas },
-    parados: parados.slice(0, 8),
-    valorParado: parados.reduce((s, p) => s + p.valorParado, 0),
+    parados: paradosTop.map(comoLinha).map((p) => ({ ...p, valorParado: valorEmEstoque(p.saldoMil, p.custoMedioCentavos) })),
+    valorParado: t.valorParado,
     comprar: comprar.slice(0, 12),
-    maisVendidos: maisVendidos.slice(0, 10),
+    maisVendidos,
     contagemAbc,
     recentes,
   };

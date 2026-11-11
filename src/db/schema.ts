@@ -295,6 +295,16 @@ export const vendas = pgTable(
     clienteId: uuid("cliente_id"),
     origem: origemVendaEnum("origem").notNull().default("manual"),
     /**
+     * Caixa: a mesma intenção de venda (um carrinho) mandada duas vezes — clique duplo, rede que
+     * caiu depois de gravar, outra aba — devolve a venda já feita em vez de vender de novo.
+     */
+    chaveIdempotencia: text("chave_idempotencia"),
+    /** Resumo do carrinho daquela chave: a mesma chave com outro carrinho é recusada. */
+    pedidoHash: text("pedido_hash"),
+    /** Dinheiro: quanto o cliente entregou e quanto voltou de troco. O valor da venda não muda. */
+    valorEntregueCentavos: centavos("valor_entregue_centavos"),
+    trocoCentavos: centavos("troco_centavos"),
+    /**
      * null = entrou sozinha (WhatsApp, agenda…) e espera o check do dono. O padrão é "agora":
      * quem lança à mão já conferiu; os canais automáticos gravam null de propósito.
      */
@@ -319,6 +329,8 @@ export const vendas = pgTable(
     index("vendas_empresa_conferir_idx").on(t.empresaId).where(sql`${t.conferidoEm} is null and ${t.excluidoEm} is null`),
     index("vendas_empresa_cliente_idx").on(t.empresaId, t.clienteId),
     check("vendas_valor_positivo", sql`${t.valorCentavos} > 0`),
+    uniqueIndex("vendas_chave_uq").on(t.empresaId, t.chaveIdempotencia).where(sql`${t.chaveIdempotencia} is not null`),
+    check("vendas_troco", sql`${t.trocoCentavos} is null or (${t.trocoCentavos} >= 0 and ${t.valorEntregueCentavos} = ${t.valorCentavos} + ${t.trocoCentavos})`),
     index("vendas_empresa_data_idx").on(t.empresaId, t.data),
     index("vendas_empresa_receb_idx").on(t.empresaId, t.dataRecebimento),
   ],
@@ -741,6 +753,16 @@ export const parcelasDivida = pgTable(
 // ─── Auditoria e tarefas ─────────────────────────────────────────────────────
 
 /** Quem fez o quê. O agente do WhatsApp e o painel Urutau também registram aqui. */
+/**
+ * Freio de tentativas (login, cadastro, demonstração, agenda pública, IA). Fica no banco para
+ * valer entre todos os servidores: um processo novo não zera a contagem.
+ */
+export const limitesUso = pgTable("limites_uso", {
+  chave: text("chave").primaryKey(),
+  inicio: timestamp("inicio", { withTimezone: true }).notNull().defaultNow(),
+  contagem: integer("contagem").notNull().default(0),
+});
+
 export const auditoria = pgTable(
   "auditoria",
   {
@@ -1633,14 +1655,19 @@ export const vendaItens = pgTable(
     quantidadeMil: bigint("quantidade_mil", { mode: "number" }).notNull(),
     precoUnitarioCentavos: centavos("preco_unitario_centavos").notNull(),
     descontoCentavos: centavos("desconto_centavos").notNull().default(0),
+    /** A parte deste item no desconto dado na venda inteira (rateado; a soma fecha o desconto). */
+    descontoVendaCentavos: centavos("desconto_venda_centavos").notNull().default(0),
+    /** Receita líquida do item: preço × quantidade − desconto do item − parte do desconto da venda. */
     totalCentavos: centavos("total_centavos").notNull(),
     custoUnitarioCentavos: centavos("custo_unitario_centavos").notNull().default(0),
+    /** Custo da quantidade vendida, calculado uma vez na venda (margem, relatório e estorno usam este). */
+    custoTotalCentavos: centavos("custo_total_centavos").notNull().default(0),
   },
   (t) => [
     foreignKey({ name: "venda_itens_produto_fk", columns: [t.empresaId, t.produtoId], foreignColumns: [produtos.empresaId, produtos.id] }),
     index("venda_itens_venda_idx").on(t.vendaId),
     index("venda_itens_produto_idx").on(t.empresaId, t.produtoId),
-    check("venda_itens_valores", sql`${t.quantidadeMil} > 0 and ${t.totalCentavos} >= 0 and ${t.descontoCentavos} >= 0`),
+    check("venda_itens_valores", sql`${t.quantidadeMil} > 0 and ${t.totalCentavos} >= 0 and ${t.descontoCentavos} >= 0 and ${t.descontoVendaCentavos} >= 0`),
   ],
 );
 
